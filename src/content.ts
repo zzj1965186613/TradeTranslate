@@ -1,19 +1,23 @@
 // TradeTranslate content script for WhatsApp Web
-//   Incoming: auto-translate EN â†’ ZH, append below original
-//   Outgoing: intercept ZH â†’ EN replacement before send
+//   Incoming: auto-translate EN ¡ú ZH, append below original
+//   Outgoing: intercept ZH ¡ú EN replacement before send
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Types ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 interface TranslateResponse {
   translated: string;
   error?: string;
 }
 
-// â”€â”€ Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Configuration ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 const DEBOUNCE_MS = 600;
 const TRANSLATION_ATTR = "data-tt-done";
 const TRANSLATION_CLASS = "tt-translation";
+const __TT_DEBUG__ = true;
+function ttLog(...args: unknown[]): void {
+  if (__TT_DEBUG__) console.debug("[TradeTranslate]", ...args);
+}
 
-// â”€â”€ Mutable state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Mutable state ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 let translateIncoming = true;
 let translateOutgoing = true;
 let cachedTranslation: string | null = null;
@@ -21,7 +25,10 @@ let cachedSource: string | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let isProcessingSend = false;
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Track bound input elements to prevent duplicate bindings
+const boundInputs = new WeakSet<HTMLElement>();
+
+// ©¤©¤ Helpers ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 function hasChinese(text: string): boolean {
   return /[\u4e00-\u9fff\u3400-\u4dbf]/.test(text);
@@ -30,9 +37,15 @@ function hasChinese(text: string): boolean {
 function isEnglishDominant(text: string): boolean {
   const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
   const cjkChars = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;
+  // No CJK at all ¡ú English
   if (cjkChars === 0) return latinChars > 0;
-  // Allow small CJK fragments in otherwise-English messages
+  // Has CJK but mostly Latin
   return cjkChars / text.length < 0.2 && latinChars > cjkChars;
+}
+
+function isEnglish(text: string): boolean {
+  // Simple check: has Latin letters and no CJK
+  return /[a-zA-Z]/.test(text) && !hasChinese(text);
 }
 
 async function loadSettings(): Promise<void> {
@@ -69,10 +82,12 @@ function sendTranslate(
   });
 }
 
-// â”€â”€ Incoming: find message text elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Incoming: find message text elements ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 function getMessageTextEls(container: Element): Element[] {
-  const els = container.querySelectorAll("span.selectable-text");
+  const els = container.querySelectorAll(
+    '[data-testid="selectable-text"], span.selectable-text'
+  );
   return Array.from(els).filter((el) => {
     if (el.hasAttribute(TRANSLATION_ATTR)) return false;
     const text = el.textContent?.trim();
@@ -81,143 +96,187 @@ function getMessageTextEls(container: Element): Element[] {
 }
 
 function isIncomingMessage(el: Element): boolean {
-  // Strategy 1: incoming messages carry data-pre-plain-text (sender + timestamp)
-  if (el.closest("[data-pre-plain-text]")) return true;
+  // Primary: find the enclosing msg-container and check tail direction
+  const container = el.closest('[data-testid="msg-container"]');
+  if (container) {
+    // tail-out = outgoing, tail-in = incoming
+    if (container.querySelector('[data-testid="tail-out"]')) return false;
+    if (container.querySelector('[data-testid="tail-in"]')) return true;
 
-  // Strategy 2: outgoing messages have .message-out ancestor
-  const row = el.closest('[role="row"]');
-  if (row) {
-    if (row.querySelector(".message-out")) return false;
-    // If there's a message-in class, definitely incoming
-    if (row.querySelector(".message-in")) return true;
+    // Fallback: use parent's alignItems to detect direction.
+    // WhatsApp renders incoming (left) with flex-start, outgoing (right) with flex-end.
+    // This covers messages without tail indicators (non-last in a group).
+    const parent = container.parentElement;
+    if (parent) {
+      const alignItems = window.getComputedStyle(parent).alignItems;
+      if (alignItems === "flex-start") return true;
+      if (alignItems === "flex-end") return false;
+    }
   }
 
-  // Strategy 3: check for message-out class anywhere in the ancestor chain
-  const bubble = el.closest('[class*="message"]');
-  if (bubble) return !bubble.className.includes("message-out");
+  // Fallback 2: check row-level msg-container
+  const row = el.closest('[role="row"]');
+  if (row) {
+    const rc = row.querySelector('[data-testid="msg-container"]');
+    if (rc) {
+      if (rc.querySelector('[data-testid="tail-out"]')) return false;
+      if (rc.querySelector('[data-testid="tail-in"]')) return true;
+    }
+  }
+
+  // Fallback 3: legacy .message-out / .message-in classes
+  if (el.closest(".message-out")) return false;
+  if (el.closest(".message-in")) return true;
 
   return false;
 }
 
-function isTranslationElPresent(copyableParent: Element): boolean {
-  return (
-    copyableParent.parentElement?.querySelector(`.${TRANSLATION_CLASS}`) !==
-    null
-  );
+function isTranslationElPresent(insertTarget: Element): boolean {
+  return insertTarget.querySelector(`.${TRANSLATION_CLASS}`) !== null;
 }
 
 function appendTranslation(originalEl: Element, translation: string): void {
+  // Walk up to find a stable insertion anchor
   const copyableParent =
     originalEl.closest(".copyable-text") || originalEl.parentElement;
   if (!copyableParent) return;
 
+  // Insert at the message-content wrapper level (sibling of text area)
+  const insertTarget = copyableParent.parentElement;
+  if (!insertTarget) return;
+
   // Remove any stale translation
-  const existing =
-    copyableParent.parentElement?.querySelector(`.${TRANSLATION_CLASS}`);
+  const existing = insertTarget.querySelector(`.${TRANSLATION_CLASS}`);
   if (existing) existing.remove();
 
   const div = document.createElement("div");
   div.className = TRANSLATION_CLASS;
   div.textContent = translation;
-  div.setAttribute("dir", "auto");
   div.style.cssText =
-    "font-size:0.82em;color:#8696a0;font-style:italic;margin-top:3px;" +
-    "padding:2px 0;line-height:1.4;user-select:text;";
-
-  copyableParent.insertAdjacentElement("afterend", div);
+    "color:#667781;font-size:0.9em;padding:4px 0;margin-top:2px;border-top:1px solid #e0e0e0;";
+  insertTarget.appendChild(div);
+  originalEl.setAttribute(TRANSLATION_ATTR, "true");
+  ttLog("Translation appended:", translation.substring(0, 60));
 }
 
-async function translateMessage(el: Element): Promise<void> {
-  const text = el.textContent?.trim();
-  if (!text || text.length < 2) return;
-  if (!isEnglishDominant(text)) return;
+// ©¤©¤ Incoming: mutation processing ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
-  el.setAttribute(TRANSLATION_ATTR, "true");
+function isProcessed(el: Element): boolean {
+  return (
+    el.hasAttribute(TRANSLATION_ATTR) ||
+    el.closest(`[${TRANSLATION_ATTR}]`) !== null
+  );
+}
+
+async function processTextNode(textEl: Element): Promise<void> {
+  if (isProcessed(textEl)) return;
+  if (!isIncomingMessage(textEl)) {
+    ttLog("Skipping outgoing message");
+    return;
+  }
+
+  const text = textEl.textContent?.trim();
+  if (!text || text.length < 2) return;
+
+  // Check if it looks like English (no Chinese chars, has Latin chars)
+  if (!isEnglish(text)) {
+    ttLog("Skipping non-English message:", text.substring(0, 30));
+    return;
+  }
+
+  // Check if translation already present at insertion level
+  const copyableParent =
+    textEl.closest(".copyable-text") || textEl.parentElement;
+  const insertTarget = copyableParent?.parentElement;
+  if (insertTarget && isTranslationElPresent(insertTarget)) return;
+
+  ttLog("Translating incoming EN¡úZH:", text.substring(0, 40));
 
   try {
     const response = await sendTranslate(text, "en2zh");
-    if (response.error || !response.translated) return;
-    appendTranslation(el, response.translated);
-  } catch {
-    el.removeAttribute(TRANSLATION_ATTR);
+    if (!response.error && response.translated) {
+      appendTranslation(textEl, response.translated);
+    } else {
+      ttLog("Translation API error:", response.error);
+    }
+  } catch (err) {
+    ttLog("Translation exception:", err);
   }
 }
 
-function processNewNodes(nodes: NodeList): void {
-  for (const node of nodes) {
-    if (!(node instanceof Element)) continue;
-    const textEls = getMessageTextEls(node);
-    for (const el of textEls) {
-      if (isIncomingMessage(el)) translateMessage(el);
+async function processNewNodes(nodes: NodeList): Promise<void> {
+  for (const node of Array.from(nodes)) {
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = node as Element;
+
+    // Find new message text elements in the added subtree
+    const textEls = getMessageTextEls(el);
+
+    // Also check if the node itself is a selectable-text
+    if (
+      (el.matches?.('[data-testid="selectable-text"]') ||
+        el.matches?.("span.selectable-text")) &&
+      !el.hasAttribute(TRANSLATION_ATTR)
+    ) {
+      const text = el.textContent?.trim();
+      if (text && text.length >= 2) {
+        textEls.push(el);
+      }
+    }
+
+    // Deduplicate
+    const seen = new Set<Element>();
+    for (const textEl of textEls) {
+      if (seen.has(textEl)) continue;
+      seen.add(textEl);
+      await processTextNode(textEl);
     }
   }
 }
 
-// â”€â”€ Outgoing: input helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-function findChatInput(): HTMLElement | null {
-  return (
-    (document.querySelector(
-      '#main div[contenteditable="true"][role="textbox"]'
-    ) as HTMLElement | null) ??
-    (document.querySelector(
-      'footer div[contenteditable="true"]'
-    ) as HTMLElement | null) ??
-    (document.querySelector(
-      "#main div[contenteditable]"
-    ) as HTMLElement | null)
-  );
-}
-
-function findSendButton(): HTMLElement | null {
-  return (
-    (document.querySelector(
-      'button[aria-label="Send"]'
-    ) as HTMLElement | null) ??
-    ((document.querySelector('span[data-icon="send"]') as HTMLElement | null)
-      ?.closest("button") as HTMLElement | null)
-  );
-}
+// ©¤©¤ Outgoing: input helpers ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 function getInputText(input: HTMLElement): string {
-  return input.innerText?.trim() || "";
+  return input.innerText?.trim() || input.textContent?.trim() || "";
 }
 
 function setInputText(input: HTMLElement, text: string): void {
-  input.textContent = text;
-
-  // Place cursor at end
-  const range = document.createRange();
-  range.selectNodeContents(input);
-  range.collapse(false);
+  input.focus();
+  // Select all existing content
   const sel = window.getSelection();
   if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(input);
     sel.removeAllRanges();
     sel.addRange(range);
   }
-
-  // Notify WhatsApp that the input changed
-  input.dispatchEvent(
-    new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText" })
-  );
+  // Use execCommand for contenteditable to trigger WhatsApp's input handling
+  document.execCommand("selectAll");
+  document.execCommand("insertText", false, text);
 }
 
-function fireEnterOn(input: HTMLElement): void {
-  const opts = {
+function fireEnterOn(el: HTMLElement): void {
+  const enterDown = new KeyboardEvent("keydown", {
     key: "Enter",
     code: "Enter",
     keyCode: 13,
     which: 13,
     bubbles: true,
     cancelable: true,
-    composed: true,
-  };
-  input.dispatchEvent(new KeyboardEvent("keydown", opts));
-  input.dispatchEvent(new KeyboardEvent("keypress", opts));
-  input.dispatchEvent(new KeyboardEvent("keyup", opts));
+  });
+  const enterUp = new KeyboardEvent("keyup", {
+    key: "Enter",
+    code: "Enter",
+    keyCode: 13,
+    which: 13,
+    bubbles: true,
+    cancelable: true,
+  });
+  el.dispatchEvent(enterDown);
+  el.dispatchEvent(enterUp);
 }
 
-// â”€â”€ Outgoing: translation flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Outgoing: translation handler ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 async function handleOutgoingTranslation(
   input: HTMLElement
@@ -225,23 +284,33 @@ async function handleOutgoingTranslation(
   const text = getInputText(input);
   if (!text || !hasChinese(text)) return false;
 
-  isProcessingSend = true;
+  ttLog("Translating outgoing ZH¡úEN:", text.substring(0, 40));
 
   try {
     let translated: string;
+
+    // Use cached translation if it matches
     if (cachedTranslation && cachedSource === text) {
       translated = cachedTranslation;
+      ttLog("Using cached translation");
     } else {
       const response = await sendTranslate(text, "zh2en");
-      if (response.error || !response.translated) return false;
+      if (response.error || !response.translated) {
+        ttLog("Translation failed:", response.error);
+        return false;
+      }
       translated = response.translated;
     }
 
+    // Replace the input text with the translation
     setInputText(input, translated);
-    cachedTranslation = null;
-    cachedSource = null;
+
+    // Wait for WhatsApp to process the text change
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     return true;
-  } catch {
+  } catch (err) {
+    ttLog("Outgoing translation error:", err);
     return false;
   } finally {
     setTimeout(() => {
@@ -265,20 +334,24 @@ function debouncedPreTranslate(input: HTMLElement): void {
       if (!response.error && response.translated) {
         cachedTranslation = response.translated;
         cachedSource = text;
+        ttLog("Pre-cached translation for:", text.substring(0, 30));
       }
     } catch {
-      // non-critical â€” will re-fetch on send
+      // non-critical ¡ª will re-fetch on send
     }
   }, DEBOUNCE_MS);
 }
 
-// â”€â”€ Outgoing: event binding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Outgoing: event binding ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 function setupOutgoingHandler(): void {
   const input = findChatInput();
   if (!input) return;
-  if (input.hasAttribute("data-tt-bound")) return;
-  input.setAttribute("data-tt-bound", "true");
+  // Use WeakSet to prevent duplicate bindings on the same DOM element
+  if (boundInputs.has(input)) return;
+  boundInputs.add(input);
+
+  ttLog("Bound outgoing handler to input");
 
   // Debounced pre-translation while typing
   input.addEventListener(
@@ -290,7 +363,7 @@ function setupOutgoingHandler(): void {
     { passive: true }
   );
 
-  // Intercept Enter key (send)
+  // Intercept Enter key (send) ¡ª using capture phase
   input.addEventListener(
     "keydown",
     async (e) => {
@@ -302,12 +375,12 @@ function setupOutgoingHandler(): void {
 
       e.preventDefault();
       e.stopImmediatePropagation();
+      isProcessingSend = true;
 
       const ok = await handleOutgoingTranslation(input);
       if (ok) {
-        setTimeout(() => fireEnterOn(input), 50);
+        setTimeout(() => fireEnterOn(input), 80);
       } else {
-        // Translation failed â€” let the original text through
         isProcessingSend = false;
         fireEnterOn(input);
       }
@@ -318,8 +391,11 @@ function setupOutgoingHandler(): void {
 
 function setupSendButtonHandler(): void {
   const sendBtn = findSendButton();
-  if (!sendBtn || sendBtn.hasAttribute("data-tt-bound")) return;
+  if (!sendBtn) return;
+  if (sendBtn.hasAttribute("data-tt-bound")) return;
   sendBtn.setAttribute("data-tt-bound", "true");
+
+  ttLog("Bound send button handler");
 
   sendBtn.addEventListener(
     "mousedown",
@@ -334,29 +410,66 @@ function setupSendButtonHandler(): void {
 
       e.preventDefault();
       e.stopImmediatePropagation();
+      isProcessingSend = true;
 
       const ok = await handleOutgoingTranslation(input);
       if (ok) {
-        setTimeout(() => sendBtn.click(), 50);
+        setTimeout(() => sendBtn.click(), 80);
       } else {
         isProcessingSend = false;
-        setTimeout(() => sendBtn.click(), 50);
+        setTimeout(() => sendBtn.click(), 80);
       }
     },
     { capture: true }
   );
 }
 
-// â”€â”€ Observers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Outgoing: find chat input ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+
+function findChatInput(): HTMLElement | null {
+  return (
+    document.querySelector(
+      '[data-testid="conversation-compose-box-input"]'
+    ) ??
+    document.querySelector(
+      '#main div[contenteditable="true"][role="textbox"]'
+    ) ??
+    document.querySelector('footer div[contenteditable="true"]') ??
+    document.querySelector('div[contenteditable="true"]') ??
+    null
+  ) as HTMLElement | null;
+}
+
+// ©¤©¤ Outgoing: find send button ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+
+function findSendButton(): HTMLElement | null {
+  return (
+    // WhatsApp currently uses a span with data-testid="wds-ic-send-filled"
+    // inside the send button, and the button itself has aria-label="·¢ËÍ"/"Send"
+    document.querySelector('#main button[aria-label="\u53d1\u9001"]') ??
+    document.querySelector('#main button[aria-label="Send"]') ??
+    document.querySelector('button[aria-label="\u53d1\u9001"]') ??
+    document.querySelector('button[aria-label="Send"]') ??
+    // Legacy: data-testid="send"
+    document.querySelector('[data-testid="send"]') ??
+    null
+  ) as HTMLElement | null;
+}
+
+// ©¤©¤ Observers ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 function setupMessageObserver(): void {
   const target =
+    document.querySelector(
+      '[data-testid="conversation-panel-messages"]'
+    ) ??
     document.querySelector("#main") ??
-    document.querySelector('[data-testid="conversation-panel-messages"]') ??
     document.body;
 
   if (target.hasAttribute("data-tt-observed")) return;
   target.setAttribute("data-tt-observed", "true");
+
+  ttLog("Message observer attached to", target.tagName);
 
   const observer = new MutationObserver((mutations) => {
     if (!translateIncoming) return;
@@ -371,11 +484,14 @@ function setupMessageObserver(): void {
 function setupNavigationObserver(): void {
   const observer = new MutationObserver(() => {
     const input = findChatInput();
-    if (input && !input.hasAttribute("data-tt-bound")) {
+    if (input && !boundInputs.has(input)) {
       setupOutgoingHandler();
       setupSendButtonHandler();
     }
-    const target = document.querySelector("#main");
+    const target =
+      document.querySelector(
+        '[data-testid="conversation-panel-messages"]'
+      ) ?? document.querySelector("#main");
     if (target && !target.hasAttribute("data-tt-observed")) {
       setupMessageObserver();
     }
@@ -390,10 +506,11 @@ function rebindAll(): void {
   setupMessageObserver();
 }
 
-// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Init ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 
 async function init(): Promise<void> {
   await loadSettings();
+  ttLog("TradeTranslate content script initializing");
   rebindAll();
   setupNavigationObserver();
 
