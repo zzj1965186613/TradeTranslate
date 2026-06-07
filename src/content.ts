@@ -247,8 +247,9 @@ function getInputText(input: HTMLElement): string {
   return input.innerText?.trim() || input.textContent?.trim() || "";
 }
 
-function setInputText(input: HTMLElement, text: string): void {
+function setInputText(input: HTMLElement, text: string): boolean {
   input.focus();
+
   // Select all existing content
   const sel = window.getSelection();
   if (sel) {
@@ -257,9 +258,77 @@ function setInputText(input: HTMLElement, text: string): void {
     sel.removeAllRanges();
     sel.addRange(range);
   }
-  // Use execCommand for contenteditable to trigger WhatsApp's input handling
+
+  // Method 1: execCommand insertText ¡ª works in most contenteditable editors
+  // This is the classic way and triggers input events in many editors.
   document.execCommand("selectAll");
   document.execCommand("insertText", false, text);
+
+  let current = input.innerText?.trim() || input.textContent?.trim() || "";
+  if (current === text) {
+    ttLog("setText via execCommand succeeded");
+    return true;
+  }
+
+  // Method 2: ClipboardEvent paste ¡ª Lexical handles paste natively
+  ttLog("execCommand failed, trying paste event");
+  input.focus();
+  const sel2 = window.getSelection();
+  if (sel2) {
+    const range2 = document.createRange();
+    range2.selectNodeContents(input);
+    sel2.removeAllRanges();
+    sel2.addRange(range2);
+  }
+  const dt = new DataTransfer();
+  dt.setData("text/plain", text);
+  input.dispatchEvent(
+    new ClipboardEvent("paste", {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    })
+  );
+
+  current = input.innerText?.trim() || input.textContent?.trim() || "";
+  if (current === text) {
+    ttLog("setText via paste succeeded");
+    return true;
+  }
+
+  // Method 3: beforeinput insertText event
+  ttLog("Paste failed, trying beforeinput event");
+  input.focus();
+  input.dispatchEvent(
+    new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: text,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    })
+  );
+
+  current = input.innerText?.trim() || input.textContent?.trim() || "";
+  if (current === text) {
+    ttLog("setText via beforeinput succeeded");
+    return true;
+  }
+
+  // Method 4: Direct DOM update ¡ª last resort, may not update Lexical state
+  ttLog("All input methods failed, using direct DOM update");
+  const p = input.querySelector("p");
+  if (p) {
+    p.textContent = "";
+    const span = document.createElement("span");
+    span.setAttribute("data-lexical-text", "true");
+    span.textContent = text;
+    p.appendChild(span);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  return false;
 }
 
 function fireEnterOn(el: HTMLElement): void {
@@ -317,12 +386,18 @@ async function handleOutgoingTranslation(
     }
 
     // Replace the input text with the translation
-    setInputText(input, translated);
+    const replaced = setInputText(input, translated);
 
     // Wait for WhatsApp to process the text change
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-    ttLog("Outgoing translation applied:", translated.substring(0, 40));
+    // Verify the text was actually replaced
+    const currentText = input.innerText?.trim() || input.textContent?.trim() || "";
+    if (currentText !== translated) {
+      ttLog("WARNING: Text replacement may have failed. Expected:", translated.substring(0, 30), "Got:", currentText.substring(0, 30));
+    }
+
+    ttLog("Outgoing translation applied:", translated.substring(0, 40), "replaced:", replaced);
     return true;
   } catch (err) {
     ttLog("Outgoing translation error:", err);

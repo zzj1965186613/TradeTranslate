@@ -3,6 +3,27 @@
 All notable changes to TradeTranslate are documented in this file.
 
 ---
+## [1.0.5] - 2026-06-07
+
+### Bug Fix ！ Translation replaces text but WhatsApp sends original Chinese
+
+**Severity:** Critical ！ outgoing translation appears to work but WhatsApp sends the original Chinese text.
+
+### Root Cause
+
+WhatsApp uses a Lexical rich-text editor for the compose input. The previous `setInputText()` used `document.execCommand("insertText")` which is deprecated and does not trigger Lexical's input handling. While the visible DOM text was replaced, Lexical's internal state still held the original Chinese text. When `fireEnterOn()` dispatched Enter, Lexical sent its internal state (Chinese) rather than the visible DOM text.
+
+### What Changed
+
+- `setInputText()`: Now tries 4 methods in sequence:
+  1. `document.execCommand("insertText")` ！ works for non-Lexical editors
+  2. `ClipboardEvent("paste")` ！ Lexical natively handles paste events
+  3. `InputEvent("beforeinput")` ！ simulates real keyboard input
+  4. Direct DOM update ！ last resort, updates visible text
+  Returns `boolean` indicating success.
+- `handleOutgoingTranslation()`: Now waits 200ms (was 100ms) after text replacement and verifies the input actually contains the translated text before returning success.
+- Console logs now show which method succeeded and whether replacement was verified.
+
 ## [1.0.4] - 2026-06-07
 
 ### Bug Fix ！ Long Chinese text not translated; translation delay; double-send risk
