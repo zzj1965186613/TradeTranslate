@@ -280,16 +280,21 @@ function setInputText(input: HTMLElement, text: string): boolean {
     sel2.removeAllRanges();
     sel2.addRange(range2);
   }
-  const dt = new DataTransfer();
-  dt.setData("text/plain", text);
-  input.dispatchEvent(
-    new ClipboardEvent("paste", {
-      clipboardData: dt,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    })
-  );
+  try {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    input.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      })
+    );
+  } catch {
+    // DataTransfer may not be available in all contexts
+    ttLog("DataTransfer not available, skipping paste method");
+  }
 
   current = input.innerText?.trim() || input.textContent?.trim() || "";
   if (current === text) {
