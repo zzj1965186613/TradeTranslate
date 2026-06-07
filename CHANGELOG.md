@@ -3,6 +3,34 @@
 All notable changes to TradeTranslate are documented in this file.
 
 ---
+## [1.0.4] - 2026-06-07
+
+### Bug Fix — Long Chinese text not translated; translation delay; double-send risk
+
+**Severity:** High — outgoing translation fails for longer messages like "这是一条测试消息".
+
+### Root Cause
+
+1. **Long text translation timeout:** DeepSeek API response time scales with text length. Short text ("成功") translates in <1s, but longer text ("这是一条测试消息") can take 2-3s. The Enter key handler had no explicit timeout — if the API was slow, `isProcessingSend` would reset prematurely (150ms in `finally`), allowing a second Enter to bypass interception and send the original Chinese text.
+
+2. **Double-send race condition:** If the user pressed Enter while translation was in progress, the `isProcessingSend` flag could already be reset by the `finally` block, causing the raw Chinese to be sent instead of waiting for the translation.
+
+3. **Pre-cache debounce too short:** `DEBOUNCE_MS = 600` meant the pre-translation cache often captured incomplete text during fast typing, so pressing Enter would miss the cache and make a fresh (slow) API call.
+
+### What Changed
+
+- `DEBOUNCE_MS`: 600 → 1000ms — longer debounce ensures the pre-cache captures the complete text after user stops typing.
+- `handleOutgoingTranslation()`: Added 15s explicit timeout via `Promise.race()`. If API exceeds timeout, original text is sent as fallback. `finally` block delay increased from 150ms to 500ms to prevent premature reset.
+- Enter key handler: When `isProcessingSend` is true, all subsequent Enter presses are now blocked (prevented from reaching WhatsApp) instead of silently passing through. This eliminates the double-send race condition.
+- Send button handler: Same blocking behavior applied for consistency.
+- `sendTranslate()`: Wrapped in try-catch to handle edge cases where `chrome.runtime.sendMessage` throws synchronously.
+
+### User Experience Improvement
+
+- Short text ("成功"): Pre-cached during typing → Enter → instant send (0ms API wait).
+- Long text ("这是一条测试消息"): Enter → shows blocked Enter attempts in console → waits for API → replaces text → sends English version.
+- If API fails or times out: Original Chinese text is sent as-is (graceful degradation).
+
 ## [1.0.3] - 2026-06-07
 
 ### Bug Fix — Incoming messages without tail not translated + Send button selector + Translation styling

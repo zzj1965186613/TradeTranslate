@@ -9,7 +9,7 @@ interface TranslateResponse {
 }
 
 // ©¤©¤ Configuration ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 1000;
 const TRANSLATION_ATTR = "data-tt-done";
 const TRANSLATION_CLASS = "tt-translation";
 const __TT_DEBUG__ = true;
@@ -69,16 +69,23 @@ function sendTranslate(
   direction: "en2zh" | "zh2en"
 ): Promise<TranslateResponse> {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { text, direction },
-      (response: TranslateResponse) => {
-        if (chrome.runtime.lastError) {
-          resolve({ translated: "", error: chrome.runtime.lastError.message });
-        } else {
-          resolve(response || { translated: "", error: "No response" });
+    try {
+      chrome.runtime.sendMessage(
+        { text, direction },
+        (response: TranslateResponse) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              translated: "",
+              error: chrome.runtime.lastError.message,
+            });
+          } else {
+            resolve(response || { translated: "", error: "No response" });
+          }
         }
-      }
-    );
+      );
+    } catch (err: any) {
+      resolve({ translated: "", error: err.message || "sendMessage failed" });
+    }
   });
 }
 
@@ -289,12 +296,19 @@ async function handleOutgoingTranslation(
   try {
     let translated: string;
 
-    // Use cached translation if it matches
+    // Use cached translation if it matches exactly
     if (cachedTranslation && cachedSource === text) {
       translated = cachedTranslation;
       ttLog("Using cached translation");
     } else {
-      const response = await sendTranslate(text, "zh2en");
+      // Add a timeout wrapper ¡ª if API takes too long, fall back to sending original
+      const TRANSLATE_TIMEOUT_MS = 15000;
+      const response = await Promise.race([
+        sendTranslate(text, "zh2en"),
+        new Promise<TranslateResponse>((_, reject) =>
+          setTimeout(() => reject(new Error("Translation timeout")), TRANSLATE_TIMEOUT_MS)
+        ),
+      ]);
       if (response.error || !response.translated) {
         ttLog("Translation failed:", response.error);
         return false;
@@ -308,14 +322,16 @@ async function handleOutgoingTranslation(
     // Wait for WhatsApp to process the text change
     await new Promise((resolve) => setTimeout(resolve, 100));
 
+    ttLog("Outgoing translation applied:", translated.substring(0, 40));
     return true;
   } catch (err) {
     ttLog("Outgoing translation error:", err);
     return false;
   } finally {
+    // Give enough time for WhatsApp to process, then allow next send
     setTimeout(() => {
       isProcessingSend = false;
-    }, 150);
+    }, 500);
   }
 }
 
@@ -400,7 +416,12 @@ function setupSendButtonHandler(): void {
   sendBtn.addEventListener(
     "mousedown",
     async (e) => {
-      if (!translateOutgoing || isProcessingSend) return;
+      if (!translateOutgoing) return;
+      if (isProcessingSend) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
 
       const input = findChatInput();
       if (!input) return;
@@ -412,12 +433,14 @@ function setupSendButtonHandler(): void {
       e.stopImmediatePropagation();
       isProcessingSend = true;
 
+      ttLog("Intercepting send button, translating...");
       const ok = await handleOutgoingTranslation(input);
       if (ok) {
-        setTimeout(() => sendBtn.click(), 80);
+        setTimeout(() => sendBtn.click(), 150);
       } else {
+        ttLog("Translation failed, sending original");
         isProcessingSend = false;
-        setTimeout(() => sendBtn.click(), 80);
+        setTimeout(() => sendBtn.click(), 100);
       }
     },
     { capture: true }
