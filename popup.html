@@ -9,11 +9,11 @@
     h1 { font-size: 16px; font-weight: 600; margin-bottom: 2px; color: #007acc; }
     .subtitle { font-size: 11px; color: #667781; margin-bottom: 14px; }
     label { font-size: 12px; font-weight: 500; display: block; margin-bottom: 4px; }
-    input[type="password"] {
+    input[type="password"], input[type="text"], input[type="url"], select {
       width: 100%; padding: 8px 10px; border: 1px solid #d1d7db; border-radius: 6px;
-      font-size: 13px; outline: none; transition: border-color 0.15s;
+      font-size: 13px; outline: none; transition: border-color 0.15s; background: white;
     }
-    input[type="password"]:focus { border-color: #007acc; }
+    input:focus, select:focus { border-color: #007acc; }
     .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
     button {
       padding: 7px 16px; background: #007acc; color: #fff; border: none;
@@ -34,26 +34,144 @@
     .slider::before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
     input:checked + .slider { background: #007acc; }
     input:checked + .slider::before { transform: translateX(16px); }
+    .lang-section { margin-top: 14px; border-top: 1px solid #e9edef; padding-top: 12px; }
+    .lang-section h2 { font-size: 13px; font-weight: 600; color: #3b4a54; margin-bottom: 10px; }
+    .lang-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .lang-row label { width: 30px; text-align: right; font-size: 11px; color: #667781; }
+    .lang-row select { flex: 1; }
+    .custom-fields { margin-top: 8px; display: none; }
+    .custom-fields.visible { display: block; }
+    .custom-field { margin-bottom: 8px; }
+    .custom-field label { font-size: 11px; color: #667781; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>TradeTranslate</h1>
-    <p class="subtitle">WhatsApp Web EN ↔ ZH translation</p>
-    <label for="apiKey">Deepseek API Key</label>
-    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+    <p class="subtitle">WhatsApp Web multilingual translation</p>
+
+    <label for="apiProvider">API Provider</label>
+    <select id="apiProvider">
+      <option value="deepseek" selected>DeepSeek</option>
+      <option value="openai">OpenAI</option>
+      <option value="claude">Claude (Anthropic)</option>
+      <option value="gemini">Google Gemini</option>
+      <option value="custom">Custom (OpenAI-compatible)</option>
+    </select>
+
+    <div style="margin-top: 8px;">
+      <label for="apiKey">API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+    </div>
+
+    <div id="customFields" class="custom-fields">
+      <div class="custom-field">
+        <label for="customBaseUrl">Base URL</label>
+        <input type="url" id="customBaseUrl" placeholder="https://your-api.com/v1/chat/completions">
+      </div>
+      <div class="custom-field">
+        <label for="customModel">Model Name</label>
+        <input type="text" id="customModel" placeholder="gpt-4o-mini">
+      </div>
+    </div>
+
     <div class="row">
       <button id="saveBtn">Save</button>
       <button id="clearBtn" class="danger">Clear</button>
     </div>
     <div id="status" class="status"></div>
+
+    <div class="lang-section">
+      <h2>Translation Direction A: Incoming Messages</h2>
+      <div class="lang-row">
+        <label>From:</label>
+        <select id="sourceLangIncoming">
+          <option value="en" selected>English</option>
+          <option value="zh">简体中文</option>
+          <option value="zh_tw">繁體中文</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="de">Deutsch</option>
+          <option value="pt">Português</option>
+          <option value="ru">Русский</option>
+          <option value="ar">العربية</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="th">ภาษาไทย</option>
+          <option value="id">Bahasa Indonesia</option>
+        </select>
+      </div>
+      <div class="lang-row">
+        <label>To:</label>
+        <select id="targetLangIncoming">
+          <option value="zh" selected>简体中文</option>
+          <option value="en">English</option>
+          <option value="zh_tw">繁體中文</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="de">Deutsch</option>
+          <option value="pt">Português</option>
+          <option value="ru">Русский</option>
+          <option value="ar">العربية</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="th">ภาษาไทย</option>
+          <option value="id">Bahasa Indonesia</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="lang-section">
+      <h2>Translation Direction B: Outgoing Messages</h2>
+      <div class="lang-row">
+        <label>From:</label>
+        <select id="sourceLangOutgoing">
+          <option value="zh" selected>简体中文</option>
+          <option value="en">English</option>
+          <option value="zh_tw">繁體中文</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="de">Deutsch</option>
+          <option value="pt">Português</option>
+          <option value="ru">Русский</option>
+          <option value="ar">العربية</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="th">ภาษาไทย</option>
+          <option value="id">Bahasa Indonesia</option>
+        </select>
+      </div>
+      <div class="lang-row">
+        <label>To:</label>
+        <select id="targetLangOutgoing">
+          <option value="en" selected>English</option>
+          <option value="zh">简体中文</option>
+          <option value="zh_tw">繁體中文</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="es">Español</option>
+          <option value="fr">Français</option>
+          <option value="de">Deutsch</option>
+          <option value="pt">Português</option>
+          <option value="ru">Русский</option>
+          <option value="ar">العربية</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="th">ภาษาไทย</option>
+          <option value="id">Bahasa Indonesia</option>
+        </select>
+      </div>
+    </div>
+
     <div class="toggles">
       <div class="toggle-row">
-        <span>Translate incoming (EN → ZH)</span>
+        <span>Translate incoming</span>
         <label class="switch"><input type="checkbox" id="toggleIncoming" checked><span class="slider"></span></label>
       </div>
       <div class="toggle-row">
-        <span>Translate outgoing (ZH → EN)</span>
+        <span>Translate outgoing</span>
         <label class="switch"><input type="checkbox" id="toggleOutgoing" checked><span class="slider"></span></label>
       </div>
     </div>
