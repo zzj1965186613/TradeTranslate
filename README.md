@@ -101,14 +101,6 @@ The built extension will be in the `dist/` folder.
 
 ---
 
-## See Also
-
-- [Blog](https://github.com/zzj1965186613/Blog) - My personal Jekyll blog.
-- [apptianer-nexpy](https://github.com/zzj1965186613/apptianer-nexpy) - Apptainer container definition for NeXPy (neutron reflectometry software).
-- [nuisance-apptainer](https://github.com/zzj1965186613/nuisance-apptainer) - Apptainer containers for NUISANCE neutrino interaction generator suite.
-
----
-
 ## License
 
 MIT
