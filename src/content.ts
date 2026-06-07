@@ -250,77 +250,42 @@ function getInputText(input: HTMLElement): string {
 function setInputText(input: HTMLElement, text: string): boolean {
   input.focus();
 
-  // Strategy: first clear all content, then insert the new text.
-  // This avoids the "append instead of replace" bug caused by Lexical
-  // maintaining its own selection state separate from DOM Selection.
+  // Use InputEvent "beforeinput" ！ the only method Lexical reliably responds to.
+  // Lexical processes these asynchronously, so we cannot verify via innerText
+  // immediately after dispatching. We trust the event pipeline.
 
-  // Step 1: Clear the input by selecting all and deleting
-  document.execCommand("selectAll");
-  document.execCommand("delete");
-
-  // Verify clearing worked
-  let current = input.innerText?.trim() || input.textContent?.trim() || "";
-  if (current && current !== "\n") {
-    // Clearing via execCommand didn't work ！ try direct DOM clear
-    ttLog("execCommand clear failed, clearing DOM directly");
-    const p = input.querySelector("p");
-    if (p) {
-      p.innerHTML = "<br>";
-    }
+  // Step 1: Select all content
+  const sel = window.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 
-  // Step 2: Insert the new text
-  document.execCommand("insertText", false, text);
+  // Step 2: Delete selected content via beforeinput
+  input.dispatchEvent(
+    new InputEvent("beforeinput", {
+      inputType: "deleteContentBackward",
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    })
+  );
 
-  current = input.innerText?.trim() || input.textContent?.trim() || "";
-  if (current === text) {
-    ttLog("setText via clear+insert succeeded");
-    return true;
-  }
+  // Step 3: Insert new text via beforeinput
+  input.dispatchEvent(
+    new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: text,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    })
+  );
 
-  // Method 2: Paste event ！ Lexical handles paste natively
-  ttLog("clear+insert failed, trying paste event");
-  input.focus();
-  // Clear again
-  document.execCommand("selectAll");
-  document.execCommand("delete");
-  try {
-    const dt = new DataTransfer();
-    dt.setData("text/plain", text);
-    input.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: dt,
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-      })
-    );
-  } catch {
-    ttLog("DataTransfer not available");
-  }
-
-  current = input.innerText?.trim() || input.textContent?.trim() || "";
-  if (current === text) {
-    ttLog("setText via paste succeeded");
-    return true;
-  }
-
-  // Method 3: Direct DOM replacement ！ updates visible text but may not
-  // update Lexical internal state. Fire Enter on input element directly
-  // after this to force Lexical to read from DOM.
-  ttLog("Paste failed, using direct DOM replacement");
-  const p = input.querySelector("p");
-  if (p) {
-    p.textContent = "";
-    const span = document.createElement("span");
-    span.setAttribute("data-lexical-text", "true");
-    span.textContent = text;
-    p.appendChild(span);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    return true;
-  }
-
-  return false;
+  ttLog("setText via beforeinput dispatched (async)");
+  return true;
 }
 
 function fireEnterOn(el: HTMLElement): void {
@@ -377,19 +342,14 @@ async function handleOutgoingTranslation(
       translated = response.translated;
     }
 
-    // Replace the input text with the translation
-    const replaced = setInputText(input, translated);
+    // Replace the input text with the translation using beforeinput events
+    // Lexical processes these asynchronously, so we wait for it to settle
+    setInputText(input, translated);
 
-    // Wait for WhatsApp to process the text change
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Give Lexical time to process the beforeinput events and update DOM
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Verify the text was actually replaced
-    const currentText = input.innerText?.trim() || input.textContent?.trim() || "";
-    if (currentText !== translated) {
-      ttLog("WARNING: Text replacement may have failed. Expected:", translated.substring(0, 30), "Got:", currentText.substring(0, 30));
-    }
-
-    ttLog("Outgoing translation applied:", translated.substring(0, 40), "replaced:", replaced);
+    ttLog("Outgoing translation dispatched:", translated.substring(0, 40));
     return true;
   } catch (err) {
     ttLog("Outgoing translation error:", err);
@@ -503,7 +463,7 @@ function setupSendButtonHandler(): void {
       ttLog("Intercepting send button, translating...");
       const ok = await handleOutgoingTranslation(input);
       if (ok) {
-        setTimeout(() => sendBtn.click(), 150);
+        setTimeout(() => sendBtn.click(), 500);
       } else {
         ttLog("Translation failed, sending original");
         isProcessingSend = false;

@@ -3,6 +3,27 @@
 All notable changes to TradeTranslate are documented in this file.
 
 ---
+## [1.0.7] - 2026-06-07
+
+### Bug Fix ¡ª Use InputEvent beforeinput for Lexical editor compatibility
+
+**Severity:** Critical ¡ª all previous text replacement methods failed with Lexical editor.
+
+### Root Cause
+
+Testing confirmed that Lexical editor only reliably responds to `InputEvent("beforeinput")` events. Previous approaches (`execCommand`, `ClipboardEvent paste`, direct DOM manipulation) either didn't update Lexical's internal state or had async timing issues that caused false verification failures, leading to multiple fallback attempts that appended text instead of replacing it.
+
+User console test showed:
+- `beforeinput deleteContentBackward` ¡ú successfully clears Lexical state
+- `beforeinput insertText` ¡ú successfully inserts into Lexical state
+- All methods are processed **asynchronously** by Lexical (innerText check immediately after returns empty)
+
+### What Changed
+
+- `setInputText()`: Completely rewritten to use only `InputEvent("beforeinput")` with `deleteContentBackward` + `insertText`. Removed all fallback methods that caused the append bug. Removed synchronous verification (Lexical is async).
+- `handleOutgoingTranslation()`: Removed synchronous text verification. Increased post-replacement wait from 200ms to 300ms for Lexical async processing.
+- Post-translation Enter/click delay: Increased from 150ms to 500ms to ensure Lexical fully processes the text change before sending.
+
 ## [1.0.6] - 2026-06-07
 
 ### Bug Fix ¡ª Translated text appended instead of replacing; debug logs not visible
