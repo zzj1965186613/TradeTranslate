@@ -1,8 +1,8 @@
-// TradeTranslate popup ¡ª API provider, key & settings management
+ï»¿// TradeTranslate popup ï¿½ï¿½ API provider, key & settings management
 
 const $ = (id: string) => document.getElementById(id)!;
 
-// ©¤©¤ DOM refs ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ DOM refs ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 const apiProvider = $("apiProvider") as HTMLSelectElement;
 const apiKeyInput = $("apiKey") as HTMLInputElement;
 const customFields = $("customFields") as HTMLDivElement;
@@ -22,7 +22,7 @@ const targetLangIncoming = $("targetLangIncoming") as HTMLSelectElement;
 const sourceLangOutgoing = $("sourceLangOutgoing") as HTMLSelectElement;
 const targetLangOutgoing = $("targetLangOutgoing") as HTMLSelectElement;
 
-// ©¤©¤ Provider metadata ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Provider metadata ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 const PROVIDER_PLACEHOLDERS: Record<string, string> = {
   deepseek: "sk-...",
   openai: "sk-...",
@@ -42,13 +42,13 @@ function updatePlaceholder(): void {
   }
 }
 
-// ©¤©¤ Status helper ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Status helper ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 function setStatus(text: string, type: "saved" | "empty"): void {
   statusEl.textContent = text;
   statusEl.className = `status ${type}`;
 }
 
-// ©¤©¤ Load settings ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Load settings ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 async function loadSettings(): Promise<void> {
   const stored = await chrome.storage.local.get([
     "apiProvider",
@@ -77,16 +77,20 @@ async function loadSettings(): Promise<void> {
   // Restore saved model into the appropriate dropdown
   const savedModel = stored.modelSelect || "";
   const savedCustomModel = stored.customModel || "";
+
+  // Store pending values â€” will be restored after fetch populates dropdowns
   if (savedModel && apiProvider.value !== "custom") {
-    // Will be populated after fetch; store for later
     modelSelect.dataset.pending = savedModel;
   }
   if (savedCustomModel && apiProvider.value === "custom") {
     customModel.dataset.pending = savedCustomModel;
   }
 
-  // Auto-fetch models for preset providers if API key exists
-  if (stored.apiKey && apiProvider.value !== "custom") {
+  // Auto-fetch models if API key exists (for both preset and custom providers)
+  if (stored.apiKey) {
+    fetchModelsForCurrentProvider();
+  } else if (apiProvider.value === "custom" && stored.customBaseUrl) {
+    // Custom with URL but no key â€” still try (some APIs don't need auth)
     fetchModelsForCurrentProvider();
   }
 
@@ -96,7 +100,7 @@ async function loadSettings(): Promise<void> {
   );
 }
 
-// ©¤©¤ Save / Clear ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Save / Clear ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 async function saveKey(): Promise<void> {
   const key = apiKeyInput.value.trim();
   if (!key) { setStatus("Please enter an API key", "empty"); return; }
@@ -130,7 +134,7 @@ async function clearKey(): Promise<void> {
   } catch (err) { console.error("Clear error:", err); }
 }
 
-// ©¤©¤ Event listeners ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Event listeners ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 apiProvider.addEventListener("change", updatePlaceholder);
 
 saveBtn.addEventListener("click", saveKey);
@@ -159,7 +163,7 @@ targetLangOutgoing.addEventListener("change", () => {
   chrome.storage.local.set({ targetLangOutgoing: targetLangOutgoing.value });
 });
 
-// ©¤©¤ Model fetching ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// ï¿½ï¿½ï¿½ï¿½ Model fetching ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 async function fetchModelsForCurrentProvider(): Promise<void> {
   const provider = apiProvider.value;
   const apiKey = apiKeyInput.value.trim();
@@ -212,6 +216,13 @@ async function fetchModelsForCurrentProvider(): Promise<void> {
         (m: { id: string }) => m.id === previousValue
       );
       if (match) {
+        targetSelect.value = previousValue;
+      } else if (previousValue && previousValue !== "__manual__") {
+        // Model not in list â€” add it as first option (user may have custom model)
+        const opt = document.createElement("option");
+        opt.value = previousValue;
+        opt.textContent = previousValue;
+        targetSelect.insertBefore(opt, targetSelect.firstChild);
         targetSelect.value = previousValue;
       }
     }

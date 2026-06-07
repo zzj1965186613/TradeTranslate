@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ï»¿<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -43,9 +43,9 @@
     .custom-fields.visible { display: block; }
     .custom-field { margin-bottom: 8px; }
     .custom-field label { font-size: 11px; color: #667781; }
-    button.fetch-btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; background: #e9edef; color: #3b4a54; }
-    button.fetch-btn:hover { background: #d1d7db; }
-    button.fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .fetch-btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; background: #e9edef; color: #3b4a54; border: 1px solid #d1d7db; border-radius: 6px; cursor: pointer; }
+    .fetch-btn:hover { background: #d1d7db; }
+    .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -78,7 +78,7 @@
           <select id="customModel" style="flex:1;">
             <option value="" disabled selected>Enter API Key then click refresh</option>
           </select>
-          <button id="fetchModelsBtnCustom" type="button" style="padding:7px 10px; font-size:12px; white-space:nowrap;">??</button>
+          <button id="fetchModelsBtnCustom" type="button" class="fetch-btn">ğŸ”„</button>
         </div>
       </div>
     </div>
@@ -89,7 +89,7 @@
         <select id="modelSelect" style="flex:1;">
           <option value="" disabled selected>Click refresh to load models</option>
         </select>
-        <button id="fetchModelsBtn" type="button" style="padding:7px 10px; font-size:12px; white-space:nowrap;">??</button>
+        <button id="fetchModelsBtn" type="button" class="fetch-btn">ğŸ”„</button>
       </div>
     </div>
 
@@ -105,37 +105,37 @@
         <label>From:</label>
         <select id="sourceLangIncoming">
           <option value="en" selected>English</option>
-          <option value="zh">¼òÌåÖĞÎÄ</option>
-          <option value="zh_tw">·±ówÖĞÎÄ</option>
-          <option value="ja">ÈÕ±¾ÕZ</option>
-          <option value="ko">???</option>
-          <option value="es">Espa?ol</option>
-          <option value="fr">Fran?ais</option>
+          <option value="zh">ç®€ä½“ä¸­æ–‡</option>
+          <option value="zh_tw">ç¹é«”ä¸­æ–‡</option>
+          <option value="ja">æ—¥æœ¬èª</option>
+          <option value="ko">í•œêµ­ì–´</option>
+          <option value="es">EspaÃ±ol</option>
+          <option value="fr">FranÃ§ais</option>
           <option value="de">Deutsch</option>
-          <option value="pt">Portugu¨ºs</option>
-          <option value="ru">§²§å§ã§ã§Ü§Ú§Û</option>
-          <option value="ar">???????</option>
-          <option value="vi">Ti?ng Vi?t</option>
-          <option value="th">???????</option>
+          <option value="pt">PortuguÃªs</option>
+          <option value="ru">Ğ ÑƒÑÑĞºĞ¸Ğ¹</option>
+          <option value="ar">Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©</option>
+          <option value="vi">Tiáº¿ng Viá»‡t</option>
+          <option value="th">à¸ à¸²à¸©à¸²à¹„à¸—à¸¢</option>
           <option value="id">Bahasa Indonesia</option>
         </select>
       </div>
       <div class="lang-row">
         <label>To:</label>
         <select id="targetLangIncoming">
-          <option value="zh" selected>¼òÌåÖĞÎÄ</option>
+          <option value="zh" selected>ç®€ä½“ä¸­æ–‡</option>
           <option value="en">English</option>
-          <option value="zh_tw">·±ówÖĞÎÄ</option>
-          <option value="ja">ÈÕ±¾ÕZ</option>
-          <option value="ko">???</option>
-          <option value="es">Espa?ol</option>
-          <option value="fr">Fran?ais</option>
+          <option value="zh_tw">ç¹é«”ä¸­æ–‡</option>
+          <option value="ja">æ—¥æœ¬èª</option>
+          <option value="ko">í•œêµ­ì–´</option>
+          <option value="es">EspaÃ±ol</option>
+          <option value="fr">FranÃ§ais</option>
           <option value="de">Deutsch</option>
-          <option value="pt">Portugu¨ºs</option>
-          <option value="ru">§²§å§ã§ã§Ü§Ú§Û</option>
-          <option value="ar">???????</option>
-          <option value="vi">Ti?ng Vi?t</option>
-          <option value="th">???????</option>
+          <option value="pt">PortuguÃªs</option>
+          <option value="ru">Ğ ÑƒÑÑĞºĞ¸Ğ¹</option>
+          <option value="ar">Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©</option>
+          <option value="vi">Tiáº¿ng Viá»‡t</option>
+          <option value="th">à¸ à¸²à¸©à¸²à¹„à¸—à¸¢</option>
           <option value="id">Bahasa Indonesia</option>
         </select>
       </div>
@@ -146,19 +146,19 @@
       <div class="lang-row">
         <label>From:</label>
         <select id="sourceLangOutgoing">
-          <option value="zh" selected>¼òÌåÖĞÎÄ</option>
+          <option value="zh" selected>ç®€ä½“ä¸­æ–‡</option>
           <option value="en">English</option>
-          <option value="zh_tw">·±ówÖĞÎÄ</option>
-          <option value="ja">ÈÕ±¾ÕZ</option>
-          <option value="ko">???</option>
-          <option value="es">Espa?ol</option>
-          <option value="fr">Fran?ais</option>
+          <option value="zh_tw">ç¹é«”ä¸­æ–‡</option>
+          <option value="ja">æ—¥æœ¬èª</option>
+          <option value="ko">í•œêµ­ì–´</option>
+          <option value="es">EspaÃ±ol</option>
+          <option value="fr">FranÃ§ais</option>
           <option value="de">Deutsch</option>
-          <option value="pt">Portugu¨ºs</option>
-          <option value="ru">§²§å§ã§ã§Ü§Ú§Û</option>
-          <option value="ar">???????</option>
-          <option value="vi">Ti?ng Vi?t</option>
-          <option value="th">???????</option>
+          <option value="pt">PortuguÃªs</option>
+          <option value="ru">Ğ ÑƒÑÑĞºĞ¸Ğ¹</option>
+          <option value="ar">Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©</option>
+          <option value="vi">Tiáº¿ng Viá»‡t</option>
+          <option value="th">à¸ à¸²à¸©à¸²à¹„à¸—à¸¢</option>
           <option value="id">Bahasa Indonesia</option>
         </select>
       </div>
@@ -166,18 +166,18 @@
         <label>To:</label>
         <select id="targetLangOutgoing">
           <option value="en" selected>English</option>
-          <option value="zh">¼òÌåÖĞÎÄ</option>
-          <option value="zh_tw">·±ówÖĞÎÄ</option>
-          <option value="ja">ÈÕ±¾ÕZ</option>
-          <option value="ko">???</option>
-          <option value="es">Espa?ol</option>
-          <option value="fr">Fran?ais</option>
+          <option value="zh">ç®€ä½“ä¸­æ–‡</option>
+          <option value="zh_tw">ç¹é«”ä¸­æ–‡</option>
+          <option value="ja">æ—¥æœ¬èª</option>
+          <option value="ko">í•œêµ­ì–´</option>
+          <option value="es">EspaÃ±ol</option>
+          <option value="fr">FranÃ§ais</option>
           <option value="de">Deutsch</option>
-          <option value="pt">Portugu¨ºs</option>
-          <option value="ru">§²§å§ã§ã§Ü§Ú§Û</option>
-          <option value="ar">???????</option>
-          <option value="vi">Ti?ng Vi?t</option>
-          <option value="th">???????</option>
+          <option value="pt">PortuguÃªs</option>
+          <option value="ru">Ğ ÑƒÑÑĞºĞ¸Ğ¹</option>
+          <option value="ar">Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©</option>
+          <option value="vi">Tiáº¿ng Viá»‡t</option>
+          <option value="th">à¸ à¸²à¸©à¸²à¹„à¸—à¸¢</option>
           <option value="id">Bahasa Indonesia</option>
         </select>
       </div>
