@@ -3,6 +3,23 @@
 All notable changes to TradeTranslate are documented in this file.
 
 ---
+## [1.0.6] - 2026-06-07
+
+### Bug Fix ¡ª Translated text appended instead of replacing; debug logs not visible
+
+**Severity:** Critical ¡ª outgoing message contains both Chinese original and English translation concatenated.
+
+### Root Cause
+
+1. **Text append instead of replace:** `document.execCommand("insertText")` was called after `execCommand("selectAll")`, but Lexical editor maintains its own internal selection state separate from the DOM Selection API. The `selectAll` changed the DOM selection, but Lexical's internal cursor was still at the end of the text, so `insertText` appended the translation after the original Chinese text instead of replacing it.
+
+2. **Debug logs not visible:** `ttLog()` used `console.debug()` which is filtered out by default in Chrome DevTools. Users had to enable "Verbose" log level to see them.
+
+### What Changed
+
+- `setInputText()`: Now uses a **clear-then-insert** strategy: first `execCommand("selectAll")` + `execCommand("delete")` to clear the input, then `execCommand("insertText")` to insert the translation. This ensures the input is empty before inserting, avoiding the append bug.
+- `ttLog()`: Changed from `console.debug()` to `console.log()` so logs appear in the default Console view.
+
 ## [1.0.5] - 2026-06-07
 
 ### Bug Fix ¡ª Translation replaces text but WhatsApp sends original Chinese

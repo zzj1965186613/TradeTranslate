@@ -14,7 +14,7 @@ const TRANSLATION_ATTR = "data-tt-done";
 const TRANSLATION_CLASS = "tt-translation";
 const __TT_DEBUG__ = true;
 function ttLog(...args: unknown[]): void {
-  if (__TT_DEBUG__) console.debug("[TradeTranslate]", ...args);
+  if (__TT_DEBUG__) console.log("[TradeTranslate]", ...args);
 }
 
 // ©¤©¤ Mutable state ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
@@ -250,36 +250,40 @@ function getInputText(input: HTMLElement): string {
 function setInputText(input: HTMLElement, text: string): boolean {
   input.focus();
 
-  // Select all existing content
-  const sel = window.getSelection();
-  if (sel) {
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    sel.removeAllRanges();
-    sel.addRange(range);
+  // Strategy: first clear all content, then insert the new text.
+  // This avoids the "append instead of replace" bug caused by Lexical
+  // maintaining its own selection state separate from DOM Selection.
+
+  // Step 1: Clear the input by selecting all and deleting
+  document.execCommand("selectAll");
+  document.execCommand("delete");
+
+  // Verify clearing worked
+  let current = input.innerText?.trim() || input.textContent?.trim() || "";
+  if (current && current !== "\n") {
+    // Clearing via execCommand didn't work ¡ª try direct DOM clear
+    ttLog("execCommand clear failed, clearing DOM directly");
+    const p = input.querySelector("p");
+    if (p) {
+      p.innerHTML = "<br>";
+    }
   }
 
-  // Method 1: execCommand insertText ¡ª works in most contenteditable editors
-  // This is the classic way and triggers input events in many editors.
-  document.execCommand("selectAll");
+  // Step 2: Insert the new text
   document.execCommand("insertText", false, text);
 
-  let current = input.innerText?.trim() || input.textContent?.trim() || "";
+  current = input.innerText?.trim() || input.textContent?.trim() || "";
   if (current === text) {
-    ttLog("setText via execCommand succeeded");
+    ttLog("setText via clear+insert succeeded");
     return true;
   }
 
-  // Method 2: ClipboardEvent paste ¡ª Lexical handles paste natively
-  ttLog("execCommand failed, trying paste event");
+  // Method 2: Paste event ¡ª Lexical handles paste natively
+  ttLog("clear+insert failed, trying paste event");
   input.focus();
-  const sel2 = window.getSelection();
-  if (sel2) {
-    const range2 = document.createRange();
-    range2.selectNodeContents(input);
-    sel2.removeAllRanges();
-    sel2.addRange(range2);
-  }
+  // Clear again
+  document.execCommand("selectAll");
+  document.execCommand("delete");
   try {
     const dt = new DataTransfer();
     dt.setData("text/plain", text);
@@ -292,8 +296,7 @@ function setInputText(input: HTMLElement, text: string): boolean {
       })
     );
   } catch {
-    // DataTransfer may not be available in all contexts
-    ttLog("DataTransfer not available, skipping paste method");
+    ttLog("DataTransfer not available");
   }
 
   current = input.innerText?.trim() || input.textContent?.trim() || "";
@@ -302,27 +305,10 @@ function setInputText(input: HTMLElement, text: string): boolean {
     return true;
   }
 
-  // Method 3: beforeinput insertText event
-  ttLog("Paste failed, trying beforeinput event");
-  input.focus();
-  input.dispatchEvent(
-    new InputEvent("beforeinput", {
-      inputType: "insertText",
-      data: text,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    })
-  );
-
-  current = input.innerText?.trim() || input.textContent?.trim() || "";
-  if (current === text) {
-    ttLog("setText via beforeinput succeeded");
-    return true;
-  }
-
-  // Method 4: Direct DOM update ¡ª last resort, may not update Lexical state
-  ttLog("All input methods failed, using direct DOM update");
+  // Method 3: Direct DOM replacement ¡ª updates visible text but may not
+  // update Lexical internal state. Fire Enter on input element directly
+  // after this to force Lexical to read from DOM.
+  ttLog("Paste failed, using direct DOM replacement");
   const p = input.querySelector("p");
   if (p) {
     p.textContent = "";
@@ -331,6 +317,7 @@ function setInputText(input: HTMLElement, text: string): boolean {
     span.textContent = text;
     p.appendChild(span);
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
   }
 
   return false;
