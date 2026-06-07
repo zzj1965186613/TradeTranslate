@@ -1,8 +1,8 @@
-﻿// TradeTranslate popup �� API provider, key & settings management
+// TradeTranslate popup — API provider, key & settings management
 
 const $ = (id: string) => document.getElementById(id)!;
 
-// ���� DOM refs ����������������������������������������������������������������������������������
+// ── DOM refs ─────────────────────────────────────────
 const apiProvider = $("apiProvider") as HTMLSelectElement;
 const apiKeyInput = $("apiKey") as HTMLInputElement;
 const customFields = $("customFields") as HTMLDivElement;
@@ -22,7 +22,7 @@ const targetLangIncoming = $("targetLangIncoming") as HTMLSelectElement;
 const sourceLangOutgoing = $("sourceLangOutgoing") as HTMLSelectElement;
 const targetLangOutgoing = $("targetLangOutgoing") as HTMLSelectElement;
 
-// ���� Provider metadata ����������������������������������������������������������������
+// ── Provider metadata ────────────────────────────────
 const PROVIDER_PLACEHOLDERS: Record<string, string> = {
   deepseek: "sk-...",
   openai: "sk-...",
@@ -42,13 +42,13 @@ function updatePlaceholder(): void {
   }
 }
 
-// ���� Status helper ������������������������������������������������������������������������
+// ── Status helper ────────────────────────────────────
 function setStatus(text: string, type: "saved" | "empty"): void {
   statusEl.textContent = text;
   statusEl.className = `status ${type}`;
 }
 
-// ���� Load settings ������������������������������������������������������������������������
+// ── Load settings ────────────────────────────────────
 async function loadSettings(): Promise<void> {
   const stored = await chrome.storage.local.get([
     "apiProvider",
@@ -74,25 +74,14 @@ async function loadSettings(): Promise<void> {
   targetLangOutgoing.value = stored.targetLangOutgoing || "en";
   updatePlaceholder();
 
-  // Restore saved model into the appropriate dropdown
+  // Restore saved model
   const savedModel = stored.modelSelect || "";
   const savedCustomModel = stored.customModel || "";
+  if (savedModel && apiProvider.value !== "custom") modelSelect.dataset.pending = savedModel;
+  if (savedCustomModel && apiProvider.value === "custom") customModel.dataset.pending = savedCustomModel;
 
-  // Store pending values — will be restored after fetch populates dropdowns
-  if (savedModel && apiProvider.value !== "custom") {
-    modelSelect.dataset.pending = savedModel;
-  }
-  if (savedCustomModel && apiProvider.value === "custom") {
-    customModel.dataset.pending = savedCustomModel;
-  }
-
-  // Auto-fetch models if API key exists (for both preset and custom providers)
-  if (stored.apiKey) {
-    fetchModelsForCurrentProvider();
-  } else if (apiProvider.value === "custom" && stored.customBaseUrl) {
-    // Custom with URL but no key — still try (some APIs don't need auth)
-    fetchModelsForCurrentProvider();
-  }
+  // Auto-fetch models if API key exists
+  if (stored.apiKey) fetchModelsForCurrentProvider();
 
   setStatus(
     stored.apiKey ? "API key configured" : "No API key saved",
@@ -100,7 +89,7 @@ async function loadSettings(): Promise<void> {
   );
 }
 
-// ���� Save / Clear ��������������������������������������������������������������������������
+// ── Save / Clear ─────────────────────────────────────
 async function saveKey(): Promise<void> {
   const key = apiKeyInput.value.trim();
   if (!key) { setStatus("Please enter an API key", "empty"); return; }
@@ -134,7 +123,7 @@ async function clearKey(): Promise<void> {
   } catch (err) { console.error("Clear error:", err); }
 }
 
-// ���� Event listeners ��������������������������������������������������������������������
+// ── Event listeners ──────────────────────────────────
 apiProvider.addEventListener("change", updatePlaceholder);
 
 saveBtn.addEventListener("click", saveKey);
@@ -163,7 +152,8 @@ targetLangOutgoing.addEventListener("change", () => {
   chrome.storage.local.set({ targetLangOutgoing: targetLangOutgoing.value });
 });
 
-// ���� Model fetching ������������������������������������������������������������������
+
+// ── Model fetching ─────────────────────────────────
 async function fetchModelsForCurrentProvider(): Promise<void> {
   const provider = apiProvider.value;
   const apiKey = apiKeyInput.value.trim();
@@ -176,15 +166,15 @@ async function fetchModelsForCurrentProvider(): Promise<void> {
   setStatus("Fetching model list...", "empty");
   const btn = provider === "custom" ? fetchModelsBtnCustom : fetchModelsBtn;
   btn.disabled = true;
-  btn.textContent = "?";
+  const origText = btn.textContent;
+  btn.textContent = "\u23F3";
 
   try {
     const result = await chrome.runtime.sendMessage({
       action: "fetchModels",
       provider,
       apiKey,
-      customBaseUrl:
-        provider === "custom" ? customBaseUrl.value.trim() : undefined,
+      customBaseUrl: provider === "custom" ? customBaseUrl.value.trim() : undefined,
     });
 
     if (result.error) {
@@ -204,21 +194,18 @@ async function fetchModelsForCurrentProvider(): Promise<void> {
       targetSelect.appendChild(opt);
     }
 
-    // Add "Manual input..." option at the end
+    // Add manual input option
     const manualOpt = document.createElement("option");
     manualOpt.value = "__manual__";
-    manualOpt.textContent = "?? Enter manually...";
+    manualOpt.textContent = "\u270F\uFE0F Enter manually...";
     targetSelect.appendChild(manualOpt);
 
     // Restore previous selection
     if (previousValue) {
-      const match = result.data.find(
-        (m: { id: string }) => m.id === previousValue
-      );
+      const match = result.data.find((m: { id: string }) => m.id === previousValue);
       if (match) {
         targetSelect.value = previousValue;
-      } else if (previousValue && previousValue !== "__manual__") {
-        // Model not in list — add it as first option (user may have custom model)
+      } else if (previousValue !== "__manual__") {
         const opt = document.createElement("option");
         opt.value = previousValue;
         opt.textContent = previousValue;
@@ -228,15 +215,12 @@ async function fetchModelsForCurrentProvider(): Promise<void> {
     }
 
     delete targetSelect.dataset.pending;
-    setStatus(
-      `${result.data.length} models loaded`,
-      "saved"
-    );
+    setStatus(`${result.data.length} models loaded`, "saved");
   } catch (err: any) {
     setStatus(`Fetch failed: ${err.message}`, "empty");
   } finally {
     btn.disabled = false;
-    btn.textContent = "??";
+    btn.textContent = origText;
   }
 }
 
@@ -249,9 +233,8 @@ function handleManualInput(select: HTMLSelectElement): void {
       opt.textContent = name;
       select.insertBefore(opt, select.lastElementChild);
       select.value = name;
-    } else {
-      // Revert to first option
-      if (select.options.length > 1) select.selectedIndex = 0;
+    } else if (select.options.length > 1) {
+      select.selectedIndex = 0;
     }
   }
 }
@@ -260,5 +243,6 @@ fetchModelsBtn.addEventListener("click", fetchModelsForCurrentProvider);
 fetchModelsBtnCustom.addEventListener("click", fetchModelsForCurrentProvider);
 modelSelect.addEventListener("change", () => handleManualInput(modelSelect));
 customModel.addEventListener("change", () => handleManualInput(customModel));
+
 
 loadSettings();
