@@ -9,7 +9,7 @@ interface TranslateResponse {
 }
 
 // ── Configuration ────────────────────────────────────
-const DEBOUNCE_MS = 1000;
+const DEBOUNCE_MS = 300;
 const TRANSLATION_ATTR = "data-tt-done";
 const TRANSLATION_CLASS = "tt-translation";
 const __TT_DEBUG__ = true;
@@ -412,7 +412,7 @@ async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
       ttLog("Using cached translation");
     } else {
       // Add a timeout wrapper — if API takes too long, fall back to sending original
-      const TRANSLATE_TIMEOUT_MS = 15000;
+      const TRANSLATE_TIMEOUT_MS = 10000;
       const response = await Promise.race([
         sendTranslate(text, sourceLangOutgoing, targetLangOutgoing),
         new Promise<TranslateResponse>((_, reject) =>
@@ -431,7 +431,7 @@ async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
     setInputText(input, translated);
 
     // Give Lexical time to process the beforeinput events and update DOM
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     ttLog("Outgoing translation dispatched:", translated.substring(0, 40));
     return true;
@@ -439,10 +439,12 @@ async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
     ttLog("Outgoing translation error:", err);
     return false;
   } finally {
+    // Clear any pending pre-translation debounce to prevent stale requests
+    if (debounceTimer) clearTimeout(debounceTimer);
     // Give enough time for WhatsApp to process, then allow next send
     setTimeout(() => {
       isProcessingSend = false;
-    }, 500);
+    }, 200);
   }
 }
 // ── Outgoing: find chat input ────────────────────────
@@ -479,6 +481,8 @@ function findSendButton(): HTMLElement | null {
 
 // ── Outgoing: pre-translation cache ──────────────────
 
+let lastPreTranslateText: string | null = null;
+
 function debouncedPreTranslate(input: HTMLElement): void {
   if (debounceTimer) clearTimeout(debounceTimer);
 
@@ -487,14 +491,18 @@ function debouncedPreTranslate(input: HTMLElement): void {
     if (!text || !matchesLanguage(text, sourceLangOutgoing)) {
       cachedTranslation = null;
       cachedSource = null;
+      lastPreTranslateText = null;
       return;
     }
+    // Skip if already cached or already requested for this exact text
+    if (cachedSource === text || cachedTranslation === text || lastPreTranslateText === text) return;
+    lastPreTranslateText = text;
     try {
       const response = await sendTranslate(text, sourceLangOutgoing, targetLangOutgoing);
       if (!response.error && response.translated) {
         cachedTranslation = response.translated;
         cachedSource = text;
-        ttLog("Pre-cached translation for:", text.substring(0, 30));
+        ttLog("Pre-cached for:", text.substring(0, 30));
       }
     } catch {
       // non-critical — will re-fetch on send
@@ -517,7 +525,7 @@ function setupOutgoingHandler(): void {
   input.addEventListener(
     "input",
     () => {
-      if (!translateOutgoing) return;
+      if (!translateOutgoing || isProcessingSend) return;
       debouncedPreTranslate(input);
     },
     { passive: true }
@@ -539,7 +547,7 @@ function setupOutgoingHandler(): void {
 
       const ok = await handleOutgoingTranslation(input);
       if (ok) {
-        setTimeout(() => fireEnterOn(input), 80);
+        setTimeout(() => fireEnterOn(input), 50);
       } else {
         isProcessingSend = false;
         fireEnterOn(input);
@@ -653,8 +661,8 @@ async function init(): Promise<void> {
   const retryInterval = setInterval(() => {
     retries++;
     rebindAll();
-    if (retries >= 10) clearInterval(retryInterval);
-  }, 1000);
+    if (retries >= 20) clearInterval(retryInterval);
+  }, 500);
 }
 
 if (document.readyState === "loading") {

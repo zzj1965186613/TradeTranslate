@@ -1,15 +1,18 @@
 {
     "manifest_version": 3,
     "name": "TradeTranslate",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Multilingual translation for WhatsApp Web with multiple AI provider support",
-    "permissions": ["storage"],
+    "permissions": [
+        "storage"
+    ],
     "host_permissions": [
         "*://web.whatsapp.com/*",
         "https://api.deepseek.com/*",
         "https://api.openai.com/*",
         "https://api.anthropic.com/*",
-        "https://generativelanguage.googleapis.com/*"
+        "https://generativelanguage.googleapis.com/*",
+        "<all_urls>"
     ],
     "background": {
         "service_worker": "background.js",
@@ -17,8 +20,12 @@
     },
     "content_scripts": [
         {
-            "matches": ["*://web.whatsapp.com/*"],
-            "js": ["content.js"],
+            "matches": [
+                "*://web.whatsapp.com/*"
+            ],
+            "js": [
+                "content.js"
+            ],
             "run_at": "document_idle"
         }
     ],

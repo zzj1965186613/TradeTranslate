@@ -64,7 +64,7 @@ const langNames: Record<string, string> = {
 function buildPrompt(sourceLang: string, targetLang: string): string {
   const source = langNames[sourceLang] || sourceLang;
   const target = langNames[targetLang] || targetLang;
-  return `You are a professional translator. Translate the following ${source} text into natural, fluent ${target}. Preserve tone (casual, formal, technical). Only respond with the translation — no explanations, no notes.`;
+  return `Translate the following ${source} text to ${target}. Output the translation only, nothing else.`;
 }
 
 // ── Settings helpers ───────────────────────────────
@@ -84,11 +84,15 @@ async function getSettings(): Promise<{
   const apiKey: string = stored.apiKey || "";
 
   if (provider === "custom") {
+    let customUrl = stored.customBaseUrl || "";
+    if (customUrl && !/\/chat\/completions\/?$/i.test(customUrl) && !/\/messages\/?$/i.test(customUrl)) {
+      customUrl = customUrl.replace(/\/+?$/, "") + "/chat/completions";
+    }
     return {
       provider,
       apiKey,
       config: {
-        baseUrl: stored.customBaseUrl || "",
+        baseUrl: customUrl,
         model: stored.customModel || "",
       },
     };
@@ -109,22 +113,26 @@ async function callOpenAICompatible(
   config: ProviderConfig,
   apiKey: string
 ): Promise<string> {
-  const response = await fetch(config.baseUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: text },
-      ],
-      temperature: 0.2,
-      max_tokens: 2048,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(config.baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: "user", content: `${prompt}\n\n${text}` },
+        ],
+        temperature: 0,
+        max_tokens: 512,
+      }),
+    });
+  } catch (fetchErr: any) {
+    throw new Error(`Network error: ${fetchErr.message}. Check your API endpoint URL (${config.baseUrl}) and network connection.`);
+  }
 
   if (!response.ok) {
     throw new Error(`${response.status}: ${await safeErrBody(response)}`);
@@ -144,20 +152,25 @@ async function callClaude(
   config: ProviderConfig,
   apiKey: string
 ): Promise<string> {
-  const response = await fetch(config.baseUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      system: prompt,
-      messages: [{ role: "user", content: text }],
-      max_tokens: 2048,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(config.baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        system: prompt,
+        messages: [{ role: "user", content: `Translate:\n${text}` }],
+        max_tokens: 512,
+      }),
+    });
+  } catch (fetchErr: any) {
+    throw new Error(`Network error: ${fetchErr.message}. Check your API endpoint URL (${config.baseUrl}) and network connection.`);
+  }
 
   if (!response.ok) {
     throw new Error(`${response.status}: ${await safeErrBody(response)}`);
@@ -178,14 +191,19 @@ async function callGemini(
   apiKey: string
 ): Promise<string> {
   const url = config.baseUrl.replace("{model}", config.model) + `?key=${apiKey}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: `${prompt}\n\n${text}` }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${prompt}\n\n${text}` }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 512 },
+      }),
+    });
+  } catch (fetchErr: any) {
+    throw new Error(`Network error: ${fetchErr.message}. Check your API endpoint URL (${url}) and network connection.`);
+  }
 
   if (!response.ok) {
     throw new Error(`${response.status}: ${await safeErrBody(response)}`);

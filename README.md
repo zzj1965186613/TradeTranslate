@@ -5,6 +5,17 @@ Seamless multilingual translation for **WhatsApp Web** — translate incoming an
 - **Incoming messages:** auto-translate and display below the original message.
 - **Outgoing messages:** translate before sending — the recipient sees the translated text.
 - Supports **14 languages** and **5 AI providers** (DeepSeek, OpenAI, Claude, Gemini, Custom).
+- Optimized for CJK input methods with debounced pre-translation and intelligent caching.
+
+---
+
+## What's New in v1.2.0
+
+- **Translation reliability:** Fixed models returning chat responses instead of translations by merging translation instructions into user messages.
+- **Custom API support:** Added `<all_urls>` host permission and auto-normalization of custom base URLs (e.g., `/v1` → `/v1/chat/completions`).
+- **Performance:** Reduced API latency with shorter prompts, `temperature: 0`, and `max_tokens: 512`.
+- **Input method compatibility:** Debounced pre-translation with dedup prevents spam API calls during CJK input.
+- **Stability:** Fixed post-send duplicate translation requests and encoding-safe file writes.
 
 ---
 
