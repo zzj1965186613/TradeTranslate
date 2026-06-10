@@ -4,6 +4,29 @@ All notable changes to TradeTranslate are documented in this file.
 
 ---
 
+## [1.3.0] - 2026-06-10
+
+### Added
+
+- Added Popup Custom Dictionary management: import, export, clear, and live entry count.
+- Added JSON, CSV, and TSV import support using `source,target,sourceLang,targetLang`.
+- Added storage-backed custom dictionary priority ahead of the built-in starter dictionary.
+- Added offline dictionary validation for custom priority, zh->en starter entries, en->zh starter entries, and no-match rejection.
+
+### Changed
+
+- Improved Offline Dictionary longest-match tokenization and phrase priority.
+- Expanded the lightweight starter dictionary for common zh<->en phrases and trade-related vocabulary.
+- Preserved browser-native behavior as a key-free fallback for the `browser-native` engine without using unofficial crawler interfaces.
+- Updated release metadata to v1.3.0.
+
+### Fixed
+
+- Prevented stale offline cache results after custom dictionary changes by including a custom dictionary cache variant and clearing local memory caches on dictionary updates.
+- Kept unknown offline text from being treated as a successful translation to the original text.
+
+---
+
 ## [1.1.1] - 2026-06-08
 
 ### Bug Fix — Popup encoding corruption + custom provider model persistence + CORS

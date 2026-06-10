@@ -46,6 +46,16 @@
     .fetch-btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; background: #e9edef; color: #3b4a54; border: 1px solid #d1d7db; border-radius: 6px; cursor: pointer; }
     .fetch-btn:hover { background: #d1d7db; }
     .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .fetch-btn.danger { color: #ea0038; border-color: #ea0038; background: #fff; }
+    .fetch-btn.danger:hover { background: #fce4e8; }
+    .dict-section { margin-top: 14px; border-top: 1px solid #e9edef; padding-top: 12px; }
+    .dict-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+    .dict-header h2 { font-size: 13px; font-weight: 600; color: #3b4a54; }
+    .dict-count { font-size: 11px; color: #667781; white-space: nowrap; }
+    .dict-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .dict-actions .wide { grid-column: 1 / -1; }
+    .help-text { margin-top: 6px; font-size: 10px; line-height: 1.35; color: #667781; }
+    .hidden-file { display: none; }
   </style>
 </head>
 <body>
@@ -56,13 +66,15 @@
     <label for="apiProvider">API Provider</label>
     <select id="apiProvider">
       <option value="deepseek" selected>DeepSeek</option>
+      <option value="xiaomi">Xiaomi MiMo</option>
+      <option value="offline">Offline Dictionary (Basic)</option>
       <option value="openai">OpenAI</option>
       <option value="claude">Claude (Anthropic)</option>
       <option value="gemini">Google Gemini</option>
       <option value="custom">Custom (OpenAI-compatible)</option>
     </select>
 
-    <div style="margin-top: 8px;">
+    <div id="apiKeySection" style="margin-top: 8px;">
       <label for="apiKey">API Key</label>
       <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
     </div>
@@ -91,6 +103,25 @@
         </select>
         <button id="fetchModelsBtn" type="button" class="fetch-btn">🔄</button>
       </div>
+    </div>
+
+    <div class="dict-section">
+      <div class="dict-header">
+        <h2>Custom Dictionary</h2>
+        <span id="customDictCount" class="dict-count">0 entries</span>
+      </div>
+      <input
+        id="dictFileInput"
+        class="hidden-file"
+        type="file"
+        accept=".json,.csv,.tsv,application/json,text/csv,text/tab-separated-values"
+      >
+      <div class="dict-actions">
+        <button id="importDictBtn" type="button" class="fetch-btn">Import Dictionary</button>
+        <button id="exportDictBtn" type="button" class="fetch-btn">Export Dictionary</button>
+        <button id="clearDictBtn" type="button" class="fetch-btn danger wide">Clear Custom Dictionary</button>
+      </div>
+      <p class="help-text">Supports JSON arrays and CSV/TSV with source,target,sourceLang,targetLang.</p>
     </div>
 
     <div class="row">

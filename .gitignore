@@ -1,1 +1,3 @@
-﻿node_modules/\ndist/\n
+node_modules/
+dist/
+*.zip

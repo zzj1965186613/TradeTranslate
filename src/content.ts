@@ -8,10 +8,32 @@ interface TranslateResponse {
   error?: string;
 }
 
+interface TranslateBatchItem {
+  id: string;
+  text: string;
+}
+
+interface TranslateBatchResponse {
+  results?: Record<string, TranslateResponse>;
+  error?: string;
+}
+
+interface IncomingQueueItem {
+  id: string;
+  el: Element;
+  text: string;
+  sourceLang: string;
+  targetLang: string;
+}
+
 // ── Configuration ────────────────────────────────────
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 600;
+const INCOMING_BATCH_DELAY_MS = 120;
+const INCOMING_BATCH_MAX_ITEMS = 8;
 const TRANSLATION_ATTR = "data-tt-done";
+const PENDING_ATTR = "data-tt-pending";
 const TRANSLATION_CLASS = "tt-translation";
+const MEMORY_CACHE_MAX = 250;
 const __TT_DEBUG__ = true;
 function ttLog(...args: unknown[]): void {
   if (__TT_DEBUG__) console.log("[TradeTranslate]", ...args);
@@ -28,9 +50,18 @@ let cachedTranslation: string | null = null;
 let cachedSource: string | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let isProcessingSend = false;
+let isComposing = false;
+let preTranslatePromise: Promise<TranslateResponse> | null = null;
+let preTranslateSource: string | null = null;
+let lastPreTranslateText: string | null = null;
+let incomingBatchTimer: ReturnType<typeof setTimeout> | null = null;
+let incomingIdCounter = 0;
 
 // Track bound input elements to prevent duplicate bindings
 const boundInputs = new WeakSet<HTMLElement>();
+const queuedIncomingEls = new Set<Element>();
+const incomingQueue: IncomingQueueItem[] = [];
+const memoryTranslationCache = new Map<string, string>();
 
 // ── Helpers ──────────────────────────────────────────
 
@@ -106,8 +137,57 @@ function matchesLanguage(text: string, langCode: string): boolean {
   if (expected === "cjk") {
     return hasCJK(text) && !hasHiraganaKatakana(text);
   }
-  
+
   return script === expected;
+}
+
+function translationCacheKey(
+  text: string,
+  sourceLang: string,
+  targetLang: string
+): string {
+  return `${sourceLang}\u0000${targetLang}\u0000${text}`;
+}
+
+function getMemoryTranslation(
+  text: string,
+  sourceLang: string,
+  targetLang: string
+): string | null {
+  const key = translationCacheKey(text, sourceLang, targetLang);
+  const value = memoryTranslationCache.get(key);
+  if (!value) return null;
+  memoryTranslationCache.delete(key);
+  memoryTranslationCache.set(key, value);
+  return value;
+}
+
+function setMemoryTranslation(
+  text: string,
+  sourceLang: string,
+  targetLang: string,
+  translation: string
+): void {
+  const key = translationCacheKey(text, sourceLang, targetLang);
+  if (memoryTranslationCache.has(key)) memoryTranslationCache.delete(key);
+  memoryTranslationCache.set(key, translation);
+  while (memoryTranslationCache.size > MEMORY_CACHE_MAX) {
+    const oldestKey = memoryTranslationCache.keys().next().value;
+    if (!oldestKey) break;
+    memoryTranslationCache.delete(oldestKey);
+  }
+}
+
+function resetOutgoingPreTranslate(): void {
+  cachedTranslation = null;
+  cachedSource = null;
+  preTranslatePromise = null;
+  preTranslateSource = null;
+  lastPreTranslateText = null;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 async function loadSettings(): Promise<void> {
@@ -128,6 +208,7 @@ async function loadSettings(): Promise<void> {
 }
 
 chrome.storage.onChanged.addListener((changes) => {
+  let outgoingLangChanged = false;
   if (changes.translateIncoming !== undefined)
     translateIncoming = changes.translateIncoming.newValue;
   if (changes.translateOutgoing !== undefined)
@@ -136,10 +217,25 @@ chrome.storage.onChanged.addListener((changes) => {
     sourceLangIncoming = changes.sourceLangIncoming.newValue;
   if (changes.targetLangIncoming !== undefined)
     targetLangIncoming = changes.targetLangIncoming.newValue;
-  if (changes.sourceLangOutgoing !== undefined)
+  if (changes.sourceLangOutgoing !== undefined) {
     sourceLangOutgoing = changes.sourceLangOutgoing.newValue;
-  if (changes.targetLangOutgoing !== undefined)
+    outgoingLangChanged = true;
+  }
+  if (changes.targetLangOutgoing !== undefined) {
     targetLangOutgoing = changes.targetLangOutgoing.newValue;
+    outgoingLangChanged = true;
+  }
+  if (
+    changes.apiProvider ||
+    changes.modelSelect ||
+    changes.customModel ||
+    changes.customBaseUrl ||
+    changes.customDictionary
+  ) {
+    memoryTranslationCache.clear();
+    outgoingLangChanged = true;
+  }
+  if (outgoingLangChanged) resetOutgoingPreTranslate();
 });
 
 function sendTranslate(
@@ -167,6 +263,32 @@ function sendTranslate(
     }
   });
 }
+
+function sendTranslateBatch(
+  items: TranslateBatchItem[],
+  sourceLang: string,
+  targetLang: string
+): Promise<TranslateBatchResponse> {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(
+        { action: "translateBatch", items, sourceLang, targetLang },
+        (response: TranslateBatchResponse) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              error: chrome.runtime.lastError.message,
+              results: {},
+            });
+          } else {
+            resolve(response || { error: "No response", results: {} });
+          }
+        }
+      );
+    } catch (err: any) {
+      resolve({ error: err.message || "sendMessage failed", results: {} });
+    }
+  });
+}
 // ── Incoming: find message text elements ─────────────
 
 function getMessageTextEls(container: Element): Element[] {
@@ -174,7 +296,8 @@ function getMessageTextEls(container: Element): Element[] {
     '[data-testid="selectable-text"], span.selectable-text'
   );
   return Array.from(els).filter((el) => {
-    if (el.hasAttribute(TRANSLATION_ATTR)) return false;
+    if (el.hasAttribute(TRANSLATION_ATTR) || el.hasAttribute(PENDING_ATTR))
+      return false;
     const text = el.textContent?.trim();
     return text && text.length >= 2;
   });
@@ -230,6 +353,10 @@ function isProcessed(el: Element): boolean {
   return el.hasAttribute(TRANSLATION_ATTR);
 }
 
+function isPending(el: Element): boolean {
+  return el.hasAttribute(PENDING_ATTR);
+}
+
 function isTranslationElPresent(parent: Element): boolean {
   return !!parent.querySelector(`.${TRANSLATION_CLASS}`);
 }
@@ -255,12 +382,121 @@ function appendTranslation(originalEl: Element, translation: string): void {
     "color:#667781;font-size:0.9em;padding:4px 0;margin-top:2px;border-top:1px solid #e0e0e0;";
   insertTarget.appendChild(div);
   originalEl.setAttribute(TRANSLATION_ATTR, "true");
+  originalEl.removeAttribute(PENDING_ATTR);
+  queuedIncomingEls.delete(originalEl);
   ttLog("Translation appended:", translation.substring(0, 60));
 }
 // ── Incoming: process messages ───────────────────────
 
-async function processTextNode(textEl: Element): Promise<void> {
-  if (isProcessed(textEl)) return;
+function scheduleIncomingFlush(immediate = false): void {
+  if (incomingBatchTimer) clearTimeout(incomingBatchTimer);
+  incomingBatchTimer = setTimeout(
+    () => {
+      incomingBatchTimer = null;
+      flushIncomingQueue();
+    },
+    immediate ? 0 : INCOMING_BATCH_DELAY_MS
+  );
+}
+
+async function processIncomingGroup(items: IncomingQueueItem[]): Promise<void> {
+  const pendingItems: IncomingQueueItem[] = [];
+
+  for (const item of items) {
+    const cached = getMemoryTranslation(
+      item.text,
+      item.sourceLang,
+      item.targetLang
+    );
+    if (cached) {
+      appendTranslation(item.el, cached);
+    } else {
+      pendingItems.push(item);
+    }
+  }
+
+  if (!pendingItems.length) return;
+
+  ttLog(
+    "Translating incoming batch",
+    pendingItems.length,
+    `${pendingItems[0].sourceLang}->${pendingItems[0].targetLang}`
+  );
+
+  const response = await sendTranslateBatch(
+    pendingItems.map(({ id, text }) => ({ id, text })),
+    pendingItems[0].sourceLang,
+    pendingItems[0].targetLang
+  );
+
+  if (response.error) {
+    ttLog("Batch translation API error:", response.error);
+  }
+
+  const results = response.results || {};
+  for (const item of pendingItems) {
+    queuedIncomingEls.delete(item.el);
+    item.el.removeAttribute(PENDING_ATTR);
+
+    const result = results[item.id];
+    if (!result || result.error || !result.translated) {
+      ttLog("Translation API error:", result?.error || response.error);
+      continue;
+    }
+
+    setMemoryTranslation(
+      item.text,
+      item.sourceLang,
+      item.targetLang,
+      result.translated
+    );
+    if (item.el.isConnected) appendTranslation(item.el, result.translated);
+  }
+}
+
+async function flushIncomingQueue(): Promise<void> {
+  if (!incomingQueue.length) return;
+  const items = incomingQueue.splice(0, incomingQueue.length);
+  const groups = new Map<string, IncomingQueueItem[]>();
+
+  for (const item of items) {
+    const key = `${item.sourceLang}\u0000${item.targetLang}`;
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+
+  await Promise.all(
+    Array.from(groups.values()).map((group) => processIncomingGroup(group))
+  );
+}
+
+function queueIncomingTranslation(textEl: Element, text: string): void {
+  const cached = getMemoryTranslation(
+    text,
+    sourceLangIncoming,
+    targetLangIncoming
+  );
+  if (cached) {
+    appendTranslation(textEl, cached);
+    return;
+  }
+
+  queuedIncomingEls.add(textEl);
+  textEl.setAttribute(PENDING_ATTR, "true");
+  incomingQueue.push({
+    id: `m${++incomingIdCounter}`,
+    el: textEl,
+    text,
+    sourceLang: sourceLangIncoming,
+    targetLang: targetLangIncoming,
+  });
+  scheduleIncomingFlush(incomingQueue.length >= INCOMING_BATCH_MAX_ITEMS);
+}
+
+function processTextNode(textEl: Element): void {
+  if (isProcessed(textEl) || isPending(textEl) || queuedIncomingEls.has(textEl))
+    return;
   if (!isIncomingMessage(textEl)) {
     ttLog("Skipping outgoing message");
     return;
@@ -281,21 +517,10 @@ async function processTextNode(textEl: Element): Promise<void> {
   const insertTarget = copyableParent?.parentElement;
   if (insertTarget && isTranslationElPresent(insertTarget)) return;
 
-  ttLog("Translating incoming", sourceLangIncoming, "→", targetLangIncoming, ":", text.substring(0, 40));
-
-  try {
-    const response = await sendTranslate(text, sourceLangIncoming, targetLangIncoming);
-    if (!response.error && response.translated) {
-      appendTranslation(textEl, response.translated);
-    } else {
-      ttLog("Translation API error:", response.error);
-    }
-  } catch (err) {
-    ttLog("Translation exception:", err);
-  }
+  queueIncomingTranslation(textEl, text);
 }
 
-async function processNewNodes(nodes: NodeList): Promise<void> {
+function processNewNodes(nodes: NodeList): void {
   for (const node of Array.from(nodes)) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as Element;
@@ -320,7 +545,7 @@ async function processNewNodes(nodes: NodeList): Promise<void> {
     for (const textEl of textEls) {
       if (seen.has(textEl)) continue;
       seen.add(textEl);
-      await processTextNode(textEl);
+      processTextNode(textEl);
     }
   }
 }
@@ -394,6 +619,61 @@ function fireEnterOn(el: HTMLElement): void {
 
 // ── Outgoing: translation handler ────────────────────
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Translation timeout")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+function requestOutgoingTranslation(text: string): Promise<TranslateResponse> {
+  const cached = getMemoryTranslation(
+    text,
+    sourceLangOutgoing,
+    targetLangOutgoing
+  );
+  if (cached) {
+    cachedSource = text;
+    cachedTranslation = cached;
+    return Promise.resolve({ translated: cached });
+  }
+
+  if (preTranslateSource === text && preTranslatePromise) {
+    return preTranslatePromise;
+  }
+
+  preTranslateSource = text;
+  const promise = sendTranslate(text, sourceLangOutgoing, targetLangOutgoing)
+    .then((response) => {
+      if (!response.error && response.translated) {
+        cachedSource = text;
+        cachedTranslation = response.translated;
+        setMemoryTranslation(
+          text,
+          sourceLangOutgoing,
+          targetLangOutgoing,
+          response.translated
+        );
+      }
+      return response;
+    })
+    .finally(() => {
+      if (preTranslatePromise === promise) preTranslatePromise = null;
+    });
+
+  preTranslatePromise = promise;
+  return promise;
+}
+
 async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
   const text = getInputText(input);
   if (!text) return false;
@@ -411,14 +691,11 @@ async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
       translated = cachedTranslation;
       ttLog("Using cached translation");
     } else {
-      // Add a timeout wrapper — if API takes too long, fall back to sending original
       const TRANSLATE_TIMEOUT_MS = 10000;
-      const response = await Promise.race([
-        sendTranslate(text, sourceLangOutgoing, targetLangOutgoing),
-        new Promise<TranslateResponse>((_, reject) =>
-          setTimeout(() => reject(new Error("Translation timeout")), TRANSLATE_TIMEOUT_MS)
-        ),
-      ]);
+      const response = await withTimeout(
+        requestOutgoingTranslation(text),
+        TRANSLATE_TIMEOUT_MS
+      );
       if (response.error || !response.translated) {
         ttLog("Translation failed:", response.error);
         return false;
@@ -440,7 +717,10 @@ async function handleOutgoingTranslation(input: HTMLElement): Promise<boolean> {
     return false;
   } finally {
     // Clear any pending pre-translation debounce to prevent stale requests
-    if (debounceTimer) clearTimeout(debounceTimer);
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
     // Give enough time for WhatsApp to process, then allow next send
     setTimeout(() => {
       isProcessingSend = false;
@@ -481,31 +761,38 @@ function findSendButton(): HTMLElement | null {
 
 // ── Outgoing: pre-translation cache ──────────────────
 
-let lastPreTranslateText: string | null = null;
-
 function debouncedPreTranslate(input: HTMLElement): void {
   if (debounceTimer) clearTimeout(debounceTimer);
 
   debounceTimer = setTimeout(async () => {
+    if (isComposing) return;
     const text = getInputText(input);
     if (!text || !matchesLanguage(text, sourceLangOutgoing)) {
-      cachedTranslation = null;
-      cachedSource = null;
-      lastPreTranslateText = null;
+      resetOutgoingPreTranslate();
       return;
     }
-    // Skip if already cached or already requested for this exact text
-    if (cachedSource === text || cachedTranslation === text || lastPreTranslateText === text) return;
+    const cached = getMemoryTranslation(
+      text,
+      sourceLangOutgoing,
+      targetLangOutgoing
+    );
+    if (cached) {
+      cachedSource = text;
+      cachedTranslation = cached;
+      return;
+    }
+    if (cachedSource === text || (preTranslateSource === text && preTranslatePromise)) {
+      return;
+    }
+
     lastPreTranslateText = text;
     try {
-      const response = await sendTranslate(text, sourceLangOutgoing, targetLangOutgoing);
+      const response = await requestOutgoingTranslation(text);
       if (!response.error && response.translated) {
-        cachedTranslation = response.translated;
-        cachedSource = text;
         ttLog("Pre-cached for:", text.substring(0, 30));
       }
     } catch {
-      // non-critical — will re-fetch on send
+      preTranslateSource = null;
     }
   }, DEBOUNCE_MS);
 }
@@ -521,11 +808,33 @@ function setupOutgoingHandler(): void {
 
   ttLog("Bound outgoing handler to input");
 
+  input.addEventListener(
+    "compositionstart",
+    () => {
+      isComposing = true;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+    },
+    { passive: true }
+  );
+
+  input.addEventListener(
+    "compositionend",
+    () => {
+      isComposing = false;
+      if (!translateOutgoing || isProcessingSend) return;
+      debouncedPreTranslate(input);
+    },
+    { passive: true }
+  );
+
   // Debounced pre-translation while typing
   input.addEventListener(
     "input",
     () => {
-      if (!translateOutgoing || isProcessingSend) return;
+      if (!translateOutgoing || isProcessingSend || isComposing) return;
       debouncedPreTranslate(input);
     },
     { passive: true }
@@ -536,6 +845,7 @@ function setupOutgoingHandler(): void {
     "keydown",
     async (e) => {
       if (!translateOutgoing || isProcessingSend) return;
+      if (isComposing) return;
       if (e.key !== "Enter" || e.shiftKey) return;
 
       const text = getInputText(input);

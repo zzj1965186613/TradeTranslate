@@ -1,149 +1,134 @@
-﻿# TradeTranslate
+# TradeTranslate
 
-Seamless multilingual translation for **WhatsApp Web** — translate incoming and outgoing messages between any language pair using your preferred AI provider.
+TradeTranslate is a Manifest V3 browser extension for WhatsApp Web. It translates incoming and outgoing messages with either high-quality API providers or a key-free offline/basic engine.
 
-- **Incoming messages:** auto-translate and display below the original message.
-- **Outgoing messages:** translate before sending — the recipient sees the translated text.
-- Supports **14 languages** and **5 AI providers** (DeepSeek, OpenAI, Claude, Gemini, Custom).
-- Optimized for CJK input methods with debounced pre-translation and intelligent caching.
+## What's New in v1.3.0
 
----
+- Added Custom Dictionary management in the Popup: import, export, clear, and entry count.
+- Added JSON, CSV, and TSV dictionary import with `source,target,sourceLang,targetLang` fields.
+- Improved Offline Dictionary matching with longest-match tokenization, phrase priority, punctuation preservation, and zh<->en starter entries.
+- Custom dictionary entries now take priority over the starter dictionary.
+- Browser Native translation remains available as a key-free fallback when the browser supports the Translator API.
+- Updated build and release metadata to v1.3.0.
 
-## What's New in v1.2.0
+## Translation Engines
 
-- **Translation reliability:** Fixed models returning chat responses instead of translations by merging translation instructions into user messages.
-- **Custom API support:** Added `<all_urls>` host permission and auto-normalization of custom base URLs (e.g., `/v1` → `/v1/chat/completions`).
-- **Performance:** Reduced API latency with shorter prompts, `temperature: 0`, and `max_tokens: 512`.
-- **Input method compatibility:** Debounced pre-translation with dedup prevents spam API calls during CJK input.
-- **Stability:** Fixed post-send duplicate translation requests and encoding-safe file writes.
+### API Provider Translation
 
----
+API providers use remote LLM or translation-capable model APIs. These usually provide the best quality and broadest language coverage, but require a provider API key.
+
+| Provider | Notes |
+| --- | --- |
+| DeepSeek | OpenAI-compatible chat completions. |
+| Xiaomi MiMo | OpenAI-compatible Xiaomi MiMo models. |
+| OpenAI | OpenAI chat completions. |
+| Claude (Anthropic) | Anthropic Messages API. |
+| Google Gemini | Gemini REST API. |
+| Custom (OpenAI-compatible) | For any compatible endpoint where you provide Base URL and model. |
+
+### Offline Dictionary (Basic)
+
+The `Offline Dictionary (Basic)` provider does not require an API key and does not call remote LLM APIs. It uses:
+
+1. User-imported custom dictionary entries.
+2. A lightweight built-in starter dictionary.
+3. Explicit no-match errors when no dictionary entry matches.
+
+This is not full machine translation. It is deterministic phrase replacement intended for common terms, short phrases, and user-defined vocabulary. Unknown text is not treated as successfully translated.
+
+### Browser Native Translation
+
+The `browser-native` offline model option uses the browser's built-in Translator API when available. This is key-free online/local browser capability depending on the browser implementation, not an unofficial Google or Microsoft crawler interface. If the browser API is unavailable, TradeTranslate falls back to the dictionary path and returns an explicit error on no match.
+
+### Transformers.js Placeholder
+
+`transformers-js` is reserved for a future local WASM/model integration. It does not load large models in v1.3.0 and falls back immediately to the dictionary path.
+
+## Custom Dictionary Import
+
+Open the Popup and use the Custom Dictionary area:
+
+- `Import Dictionary`: accepts `.json`, `.csv`, and `.tsv`.
+- `Export Dictionary`: downloads the current custom entries as JSON.
+- `Clear Custom Dictionary`: removes all custom entries.
+- The Popup shows the current custom entry count.
+
+JSON format:
+
+```json
+[
+  {
+    "source": "你好",
+    "target": "hello",
+    "sourceLang": "zh",
+    "targetLang": "en"
+  }
+]
+```
+
+CSV/TSV format:
+
+```csv
+source,target,sourceLang,targetLang
+你好,hello,zh,en
+测试,test,zh,en
+```
+
+When importing a duplicate `sourceLang + targetLang + source`, the imported entry replaces the existing custom entry. Custom entries override the built-in starter dictionary during translation.
 
 ## Features
 
-- **Multilingual support:** English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português, Русский, العربية, Tiếng Việt, ภาษาไทย, Bahasa Indonesia.
-- **Multiple AI providers:** DeepSeek, OpenAI, Claude (Anthropic), Google Gemini, or any OpenAI-compatible API.
-- **Flexible language pairs:** configure any source→target combination for incoming and outgoing directions independently.
-- **Script-based detection:** automatically identifies text script (Latin, CJK, Cyrillic, Arabic, Japanese, Korean, Thai) to decide when to translate.
-- Toggle translation on/off for incoming and outgoing messages.
-- Lightweight Chrome Extension (Manifest V3).
-- API keys stored locally in the browser.
+- Incoming message translation appended below original WhatsApp messages.
+- Outgoing message translation before send.
+- Independent language pairs for incoming and outgoing directions.
+- Translation cache and batching for lower latency.
+- Provider switching between API providers and key-free offline/basic engines.
+- API keys and custom dictionaries stored locally in `chrome.storage.local`.
+- Supports English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, French, German, Portuguese, Russian, Arabic, Vietnamese, Thai, and Indonesian selectors.
 
----
+## Installation from GitHub Releases
 
-## Installation (from GitHub Releases)
-
-1. Go to the [Releases](https://github.com/zzj1965186613/TradeTranslate/releases) page.
-2. Download the latest `TradeTranslate.zip`.
-3. Extract the zip to a folder you'll keep (e.g., `C:\Extensions\TradeTranslate`).
-4. Open Chrome and go to `chrome://extensions/`.
-5. Enable **Developer mode** (top-right).
-6. Click **Load unpacked** and select the extracted folder.
-7. The TradeTranslate icon should appear in your toolbar.
-
----
+1. Open the [Releases](https://github.com/zzj1965186613/TradeTranslate/releases) page.
+2. Download the latest TradeTranslate zip.
+3. Extract it to a folder you keep.
+4. Open Chrome or a Chromium browser and go to `chrome://extensions/`.
+5. Enable Developer mode.
+6. Click Load unpacked and select the extracted extension folder.
 
 ## Configuration
 
-### 1. Choose an API Provider
+1. Click the TradeTranslate icon.
+2. Choose an API provider or `Offline Dictionary (Basic)`.
+3. For API providers, enter the API key and select a model.
+4. For offline mode, choose `local-dictionary`, `browser-native`, or `transformers-js`.
+5. Configure incoming and outgoing language directions.
+6. Click Save.
 
-Click the TradeTranslate icon and select your preferred provider:
-
-| Provider | Notes |
-|----------|-------|
-| **DeepSeek** | Default. Requires a DeepSeek API key (`sk-...`). |
-| **OpenAI** | Requires an OpenAI API key (`sk-...`). Uses `gpt-4o-mini`. |
-| **Claude (Anthropic)** | Requires an Anthropic API key (`sk-ant-...`). Uses `claude-3-5-haiku`. |
-| **Google Gemini** | Requires a Google API key (`AIza...`). Uses `gemini-2.0-flash`. |
-| **Custom (OpenAI-compatible)** | For Ollama, vLLM, Azure OpenAI, etc. Provide your own Base URL and model name. |
-
-### 2. Enter Your API Key
-
-Paste your API key and click **Save**.
-
-### 3. Set Language Pairs
-
-Configure translation directions:
-
-- **Incoming (Direction A):** e.g., From `English` → To `简体中文`
-- **Outgoing (Direction B):** e.g., From `简体中文` → To `English`
-
-Any language pair is supported, not just EN↔ZH.
-
-> Your API key is stored locally in Chrome storage and is only sent to the chosen provider during translation requests.
-
----
-
-## Usage
-
-- **Incoming:** When a message matching your source language script is received, the extension appends a translated version below it.
-- **Outgoing:** When you type a message matching your outgoing source language and press Enter (or click Send), it is automatically translated before being sent.
-- Disable either direction in the popup settings.
-
----
+Your API key is stored locally and is sent only to the selected API provider. Offline Dictionary mode does not require or send an API key.
 
 ## Development
 
-### Prerequisites
-
-- Node.js (v18+ recommended)
-- npm
-
-### Setup
-
 ```bash
-git clone https://github.com/zzj1965186613/TradeTranslate.git
-cd TradeTranslate
 npm install
-```
-
-### Build
-
-```bash
 npm run build
 ```
 
-The built extension will be in the `dist/` folder.
+The built extension is written to `dist/`.
 
-### Load for Development
+Useful validation commands:
 
-1. Run `npm run build`.
-2. Go to `chrome://extensions/`.
-3. Enable **Developer mode**.
-4. Click **Load unpacked** and select the `dist/` folder.
-5. After making changes, run `npm run build` again and click the refresh icon on the extension card.
-
----
-
-## How It Works
-
-1. `content.ts` runs on WhatsApp Web, observes new messages, and detects their script (Latin, CJK, Cyrillic, etc.).
-2. If the message matches the configured source language, it sends a translation request to the background service worker.
-3. `background.ts` routes the request to the selected AI provider (DeepSeek / OpenAI / Claude / Gemini / Custom) using the correct API format.
-4. The translated text is displayed below the original message (incoming) or replaces the input text before sending (outgoing).
-
----
-
-## Supported Providers
-
-| Provider | API Format | Key Auth Method |
-|----------|-----------|----------------|
-| DeepSeek | OpenAI-compatible | `Authorization: Bearer` |
-| OpenAI | OpenAI-compatible | `Authorization: Bearer` |
-| Claude (Anthropic) | Anthropic Messages | `x-api-key` header |
-| Google Gemini | Gemini REST | URL query parameter `?key=` |
-| Custom | OpenAI-compatible | `Authorization: Bearer` |
-
----
+```bash
+node scripts/verify-offline-dictionary.mjs
+.\node_modules\.bin\tsc.cmd --noEmit
+npm.cmd run build
+```
 
 ## Notes
 
-- This extension is designed for **WhatsApp Web** only.
-- Translation quality depends on the selected AI model.
-- Script-based detection is heuristic — it distinguishes writing systems (Latin vs CJK vs Cyrillic, etc.) rather than exact languages within the same script (e.g., English vs French, both Latin).
-- If you encounter issues, verify your API key is valid and you have remaining quota.
-
----
+- TradeTranslate is designed for WhatsApp Web.
+- API translation quality depends on the selected provider/model.
+- Offline Dictionary is intentionally lightweight and is not comparable to Google, Microsoft, or LLM translation quality.
+- No unofficial Google/Microsoft crawler interfaces are used.
 
 ## License
 
